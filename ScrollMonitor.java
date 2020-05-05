@@ -1,6 +1,7 @@
 package pathing;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 
 import processing.core.PApplet;
@@ -103,7 +104,9 @@ public class ScrollMonitor {
 	 * @param historyCap
 	 */
 	public void addDataStream(int historyCap) {
-		data.add(new float[historyCap]);
+		float[] data = new float[historyCap];
+		Arrays.fill(data, -1); // init to -1 so not drawn by stroke
+		this.data.add(data);
 		pointers.add(0);
 		streamSmoothing.add(1); // default smoothing: (1=none)
 	}
@@ -113,10 +116,12 @@ public class ScrollMonitor {
 	 * @param historyCap
 	 */
 	public void addDataStream(int historyCap, String name, int color) {
-		data.add(new float[historyCap]);
+		float[] data = new float[historyCap];
+		Arrays.fill(data, -1);
+		this.data.add(data);
 		pointers.add(0);
-		streamNamesIndex.put(name, data.size() - 1);
-		streamColours.put(data.size() - 1, color);
+		streamNamesIndex.put(name, this.data.size() - 1);
+		streamColours.put(this.data.size() - 1, color);
 		streamSmoothing.add(1); // default smoothing: (1=none)
 	}
 
@@ -152,12 +157,29 @@ public class ScrollMonitor {
 		streamSmoothing.set(dataStream, smoothing);
 	}
 
+	private boolean mouseOverPoly(float[] vertx, float[] verty, PVector point) {
+
+		boolean c = false;
+		int j = vertx.length - 1;
+		float testx = point.x;
+		float testy = point.y;
+		for (int i = 0; i < vertx.length; i++) {
+			if (((verty[i] > testy) != (verty[j] > testy))
+					&& (testx < (vertx[j] - vertx[i]) * (testy - verty[i]) / (verty[j] - verty[i]) + vertx[i])) {
+				c = !c;
+			}
+			j = i;
+		}
+		return c;
+	}
+
 	public void draw() {
 
 		PVector mousePos = new PVector(p.mouseX, p.mouseY);
+		boolean mouseOverMonitor = withinRegion(mousePos, position, PVector.add(position, dimensions));
 
 		if (!dragging) {
-			if (withinRegion(mousePos, position, PVector.add(position, dimensions))) {
+			if (mouseOverMonitor) {
 				p.cursor(PApplet.HAND);
 			} else {
 				p.cursor(PApplet.ARROW);
@@ -166,7 +188,7 @@ public class ScrollMonitor {
 			position.set(PVector.sub(mousePos, mouseDownPos).add(cachePos)); // dragging
 		}
 
-		g.fill(255, 150); // bg
+		g.fill(255, 225); // bg
 		g.noStroke();
 		g.rect(position.x, position.y, dimensions.x, dimensions.y); // bg
 
@@ -182,7 +204,7 @@ public class ScrollMonitor {
 		int dataIndex = 0; // datastream index
 		g.noFill(); // nofill here
 		for (float[] stream : data) {
-			g.stroke(streamColours.get(dataIndex), 255);
+			g.stroke(streamColours.get(dataIndex));
 			if (fill) {
 				g.fill(streamColours.get(dataIndex), 100);
 			}
@@ -203,12 +225,16 @@ public class ScrollMonitor {
 			// TODO ignore smoothing for first 'streamSmoothing.get(dataIndex)' values
 
 			// TODO BUFFER NEEDS TO BE OF SIZE: stream.length+streamSmoothing.get(dataIndex)
+			float[] vertx = new float[stream.length + 2];
+			float[] verty = new float[stream.length + 2];
 
+			float pVertX = position.x;
+			float pVertY = position.y;
 			for (int i = 0; i < stream.length + 1; i++) { // plot datapoint vertices
 				float x = position.x + i * (dimensions.x / stream.length); // calc x coord -- scale to x dimension
 
 				float val;
-				if (i > streamSmoothing.get(dataIndex)) { // dont smooth first N datapoints
+				if (i >= streamSmoothing.get(dataIndex)) { // dont smooth first N datapoints
 					float sum = 0; // sum over n last datapoints (rolling average)
 					for (int j = 0; j < streamSmoothing.get(dataIndex); j++) {
 						// sum+= stream[ (i + pointers.get(index-smoothing) -j) % stream.length]; // raw val
@@ -217,17 +243,36 @@ public class ScrollMonitor {
 						sum += stream[in];
 					}
 					sum /= streamSmoothing.get(dataIndex);
-					val = PApplet.constrain(sum, 0, max) * (dimensions.y / max); // constrain & scale
+					val = PApplet.min(sum, max) * (dimensions.y / max); // constrain & scale
 				} else {
 					val = stream[(i + pointers.get(dataIndex)) % stream.length]; // raw val
 				}
 
-				float y = (position.y + dimensions.y) - val;
-				g.vertex(x, y);
+				float y = (position.y + dimensions.y) - PApplet.ceil(val);
+				vertx[i] = x; // push vertex to array
+				verty[i] = y; // push vertex to array
+				g.vertex(x, PApplet.max(0, y)); // don't draw negative vals
+
+				if (val >= 0) { // will ignore 0 values
+					g.line(pVertX, pVertY, x, PApplet.min(y, position.y + dimensions.y - 2)); // min of 2, to account for strokeWidth
+				}
+
+				pVertX = x;
+				pVertY = PApplet.min(y, position.y + dimensions.y - 2);
 			}
 			if (fill) {
 				g.vertex(position.x + dimensions.x, position.y + dimensions.y); // lower right corner
+				vertx[stream.length] = position.x + dimensions.x;
+				verty[stream.length] = position.y + dimensions.y;
+
 				g.vertex(position.x, position.y + dimensions.y); // lower left corner
+				vertx[stream.length + 1] = position.x;
+				verty[stream.length + 1] = position.y + dimensions.y;
+
+				if (mouseOverMonitor && mouseOverPoly(vertx, verty, mousePos)) {
+					g.fill(streamColours.get(dataIndex), 145);
+				}
+				g.noStroke();
 				g.endShape(PApplet.CLOSE);
 			} else {
 				g.endShape();
@@ -330,6 +375,7 @@ public class ScrollMonitor {
 	 * Supports smoothing in the form of a moving average. To this end, the length of the 
 	 * data array must be of size= size+smoothingSize so the first data item we want 
 	 * to see can be smoothed, rather than skipping the first smoothingSize items. 
+	 * TODO dynamic ordering / opacity based on mouse-over/highest value
 	 * @author micycle1
 	 *
 	 */
