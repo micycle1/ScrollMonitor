@@ -1,7 +1,6 @@
 package pathing;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 
 import processing.core.PApplet;
@@ -27,7 +26,7 @@ public class ScrollMonitor {
 	 */
 	private final ArrayList<Integer> pointers;
 	private final HashMap<String, Integer> streamNamesIndex;
-	private HashMap<String, DataStream> streams; // TODO
+	private final HashMap<String, DataStream> streams; // TODO
 	private final HashMap<Integer, Integer> streamColours;
 	private final ArrayList<Integer> streamSmoothing; // TODO change to hashmap if allow out-of-order stream iteration
 	private float max;
@@ -45,38 +44,38 @@ public class ScrollMonitor {
 	 * @param dimensions size of scroll graph
 	 * @param max  leave empty for auto scale?
 	 */
-	public ScrollMonitor(PGraphics g, PVector position, PVector dimensions, float max) {
-		this.g = g;
-		this.position = position;
-		this.dimensions = dimensions;
-		data = new ArrayList<>();
-		pointers = new ArrayList<>();
-		streamNamesIndex = new HashMap<>();
-		streamColours = new HashMap<>();
-		streamSmoothing = new ArrayList<>();
-		this.max = max;
-	}
-
-	/**
-	 * Create graph, define using int 
-	 * @param g
-	 * @param positionX
-	 * @param positionY
-	 * @param width
-	 * @param height
-	 * @param max
-	 */
-	public ScrollMonitor(PGraphics g, int positionX, int positionY, int width, int height, float max) {
-		this.g = g;
-		this.position = new PVector(positionX, positionY);
-		this.dimensions = new PVector(width, height);
-		data = new ArrayList<>();
-		pointers = new ArrayList<>();
-		streamNamesIndex = new HashMap<>();
-		streamColours = new HashMap<>();
-		streamSmoothing = new ArrayList<>();
-		this.max = max;
-	}
+	// public ScrollMonitor(PGraphics g, PVector position, PVector dimensions, float max) {
+	// this.g = g;
+	// this.position = position;
+	// this.dimensions = dimensions;
+	// data = new ArrayList<>();
+	// pointers = new ArrayList<>();
+	// streamNamesIndex = new HashMap<>();
+	// streamColours = new HashMap<>();
+	// streamSmoothing = new ArrayList<>();
+	// this.max = max;
+	// }
+	//
+	// /**
+	// * Create graph, define using int
+	// * @param g
+	// * @param positionX
+	// * @param positionY
+	// * @param width
+	// * @param height
+	// * @param max
+	// */
+	// public ScrollMonitor(PGraphics g, int positionX, int positionY, int width, int height, float max) {
+	// this.g = g;
+	// this.position = new PVector(positionX, positionY);
+	// this.dimensions = new PVector(width, height);
+	// data = new ArrayList<>();
+	// pointers = new ArrayList<>();
+	// streamNamesIndex = new HashMap<>();
+	// streamColours = new HashMap<>();
+	// streamSmoothing = new ArrayList<>();
+	// this.max = max;
+	// }
 
 	/**
 	 * 
@@ -95,6 +94,7 @@ public class ScrollMonitor {
 		streamNamesIndex = new HashMap<>();
 		streamColours = new HashMap<>();
 		streamSmoothing = new ArrayList<>();
+		streams = new HashMap<>();
 		this.max = max;
 		p.registerMethod("mouseEvent", this);
 	}
@@ -103,37 +103,39 @@ public class ScrollMonitor {
 	 * strng name also / ID
 	 * @param historyCap
 	 */
-	public void addDataStream(int historyCap) {
-		float[] data = new float[historyCap];
-		Arrays.fill(data, -1); // init to -1 so not drawn by stroke
-		this.data.add(data);
-		pointers.add(0);
-		streamSmoothing.add(1); // default smoothing: (1=none)
+	public void addDataStream(String name, int historyCap) {
+		// float[] data = new float[historyCap];
+		// Arrays.fill(data, -1); // init to -1 so not drawn by stroke
+		// this.data.add(data);
+		// pointers.add(0);
+		// streamSmoothing.add(1); // default smoothing: (1=none)
+
+		streams.put(name, new DataStream(name, historyCap));
 	}
 
-	/**
-	 * strng name also / ID
-	 * @param historyCap
-	 */
-	public void addDataStream(int historyCap, String name, int color) {
-		float[] data = new float[historyCap];
-		Arrays.fill(data, -1);
-		this.data.add(data);
-		pointers.add(0);
-		streamNamesIndex.put(name, this.data.size() - 1);
-		streamColours.put(this.data.size() - 1, color);
-		streamSmoothing.add(1); // default smoothing: (1=none)
-	}
+	// /**
+	// * strng name also / ID
+	// * @param historyCap
+	// */
+	// public void addDataStream(int historyCap, String name, int color) {
+	// float[] data = new float[historyCap];
+	// Arrays.fill(data, -1);
+	// this.data.add(data);
+	// pointers.add(0);
+	// streamNamesIndex.put(name, this.data.size() - 1);
+	// streamColours.put(this.data.size() - 1, color);
+	// streamSmoothing.add(1); // default smoothing: (1=none)
+	// }
 
-	/**
-	 * Push new data to a stream identified by its index.
-	 * @param dataStream
-	 * @param n
-	 */
-	public void push(int dataStream, float n) {
-		data.get(dataStream)[pointers.get(dataStream)] = n;
-		pointers.set(dataStream, (pointers.get(dataStream) + 1) % data.get(dataStream).length);
-	}
+	// /**
+	// * Push new data to a stream identified by its index.
+	// * @param dataStream
+	// * @param n
+	// */
+	// public void push(int dataStream, float n) {
+	// data.get(dataStream)[pointers.get(dataStream)] = n;
+	// pointers.set(dataStream, (pointers.get(dataStream) + 1) % data.get(dataStream).length);
+	// }
 
 	/**
 	 * Push new data to a stream identified by its name.
@@ -141,9 +143,10 @@ public class ScrollMonitor {
 	 * @param n
 	 */
 	public void push(String dataStreamName, float n) {
-		int dataStream = streamNamesIndex.get(dataStreamName);
-		data.get(dataStream)[pointers.get(dataStream)] = n;
-		pointers.set(dataStream, (pointers.get(dataStream) + 1) % data.get(dataStream).length);
+		// int dataStream = streamNamesIndex.get(dataStreamName);
+		// data.get(dataStream)[pointers.get(dataStream)] = n;
+		// pointers.set(dataStream, (pointers.get(dataStream) + 1) % data.get(dataStream).length);
+		streams.get(dataStreamName).push(n);
 	}
 
 	/**
@@ -153,8 +156,14 @@ public class ScrollMonitor {
 	 * @param smoothing default = 1 == no smoothing; must be >=1
 	 */
 	public void setSmoothing(String dataStreamName, int smoothing) {
-		int dataStream = streamNamesIndex.get(dataStreamName);
-		streamSmoothing.set(dataStream, smoothing);
+		streams.get(dataStreamName).setSmoothing(smoothing);
+	}
+
+	/**
+	 * Max/ceiling display value for stream
+	 */
+	public void setMaxValue(String dataStream, float value) {
+		streams.get(dataStream).setMaxValue(value);
 	}
 
 	private boolean mouseOverPoly(float[] vertx, float[] verty, PVector point) {
@@ -171,6 +180,69 @@ public class ScrollMonitor {
 			j = i;
 		}
 		return c;
+	}
+
+	/**
+	 * draw a specifed datastream
+	 * @param dataStream
+	 */
+	public void draw(String dataStream) {
+
+	}
+
+	public void draw2() {
+
+		PVector mousePos = new PVector(p.mouseX, p.mouseY);
+		boolean mouseOverMonitor = withinRegion(mousePos, position, PVector.add(position, dimensions));
+
+		if (!dragging) {
+			if (mouseOverMonitor) {
+				p.cursor(PApplet.HAND);
+			} else {
+				p.cursor(PApplet.ARROW);
+			}
+		} else {
+			position.set(PVector.sub(mousePos, mouseDownPos).add(cachePos)); // dragging
+		}
+
+		drawBG();
+
+		g.fill(125, 200, 100, 170);
+		g.strokeWeight(3);
+		g.stroke(255, 0, 0, 200);
+		// g.noStroke();
+		for (DataStream d : streams.values()) {
+
+			g.beginShape();
+			int datumIndex = 0;
+
+			for (int i = 0; i < d.length; i++) {
+				float val = d.getDrawData(i);
+				float x = position.x + datumIndex * (dimensions.x / d.length); // calc x coord -- scale to x dimension
+				float y = (position.y + dimensions.y) - PApplet.ceil(val);
+				g.vertex(x, y);
+				datumIndex++;
+			}
+			g.vertex(position.x + dimensions.x, position.y + dimensions.y); // lower right corner
+			g.vertex(position.x, position.y + dimensions.y); // lower left corner
+			g.endShape(PApplet.CLOSE);
+
+		}
+	}
+
+	private void drawBG() {
+		g.fill(255, 200); // bg
+		g.noStroke();
+		// g.stroke(255, 255, 0); // TODO
+		g.rect(position.x, position.y, dimensions.x, dimensions.y); // bg
+
+		g.stroke(0, 200); // guidelines
+		g.strokeWeight(1); // guidelines
+		float segments = 4;
+		for (int i = 1; i < segments; i++) {
+			g.line(position.x, position.y + dimensions.y - i * (dimensions.y / (segments + 0)),
+					position.x + dimensions.x, position.y + dimensions.y - i * (dimensions.y / (segments + 0)));
+		}
 	}
 
 	public void draw() {
@@ -211,7 +283,7 @@ public class ScrollMonitor {
 			}
 			g.beginShape();
 
-			// TODO BUFFER NEEDS TO BE OF SIZE: stream.length+streamSmoothing.get(dataIndex)
+
 			float[] vertx = new float[stream.length + 2];
 			float[] verty = new float[stream.length + 2];
 
@@ -410,20 +482,23 @@ public class ScrollMonitor {
 		/**
 		 * Buffer/history size (size of {@link #data})
 		 */
-		int length;
+		final int length;
+		int direction = 1; // 1 scroll to left; -1 scroll to right
 
 		/**
 		 * todo auto push negative so it always scrolls?
 		 * Scrolls to accomdate new data only vs will always scroll 
 		 * @param name
 		 */
-		public DataStream(String name) {
+		public DataStream(String name, int history) {
 			this.name = name;
+			length = history;
 			active = true;
 			smoothing = 0;
-			pointer = smoothing; // start at smoothing _____[]......
+			pointer = 0;
 			data = new float[length + smoothing];
-			data[0] = Float.MAX_VALUE;
+			color = 0 - (255 << 8);
+			drawData = new float[length];
 			// TODO Auto-generated constructor stub
 		}
 
@@ -432,35 +507,34 @@ public class ScrollMonitor {
 		 * @param datum datapoints
 		 */
 		public void push(float datum) {
-			
-			if (pointer == 0 && this.data[0] == Float.MAX_VALUE) { // fill last values with moving average data 
+
+			if (pointer == 0 && this.data[0] == Float.MAX_VALUE) { // fill last values with moving average data
 				for (int i = 0; i < smoothing; i++) {
-					this.data[length+smoothing-i] = datum;
+					this.data[length + smoothing - i] = datum;
 				}
 			}
-			
+
 			this.data[pointer] = datum; // push raw datum
 
 			float drawData = datum; // sum of moving average
 			for (int i = 0; i < smoothing; i++) { // calc moving average
-				int newPointer = pointer - 1 - i; // pointer to historical datum
-				int newPointer2 = Math.floorMod(pointer - 1 - i, length+smoothing);
-				drawData += this.data[newPointer2]; // sum moving average
+				int newPointer = Math.floorMod(pointer - 1 - i, length + smoothing); // pointer to previous data, can wrap around
+				drawData += this.data[newPointer]; // sum moving average
 			}
 			drawData /= (smoothing + 1); // divide to get average
-			this.drawData[pointer - smoothing] = drawData; // push draw data
+			 
+			this.drawData[Math.floorMod(pointer-smoothing-1, length + smoothing)] = PApplet.constrain(drawData, 0, maxValue - 1)
+					* (dimensions.y / maxValue); // constrain & scale (-1 is stroke Weight)
 
 			pointer++; // inc pointer
-//			pointer = ((pointer % length) + smoothing) % (length + smoothing); // recalc pointer (offset to active part of data array)
-			pointer%=(length+smoothing);
-			
-//			smoothing - pointer
+			// pointer = ((pointer % length) + smoothing) % (length + smoothing); // recalc pointer (offset to active part of data array)
+			pointer %= (length + smoothing);
+
+			// smoothing - pointer
 		}
 
 		public void pushEmpty() {
-			// push no data, but scroll monitor
-			// hook onto post? using last frame
-			// move to scrollmonitor class
+			push(Float.MAX_VALUE); // TODO
 		}
 
 		/**
@@ -469,13 +543,21 @@ public class ScrollMonitor {
 		 */
 		public void setSmoothing(int smoothing) {
 			smoothing = PApplet.constrain(smoothing, 0, length); // floor & ceiling
-			if (this.smoothing != smoothing) { // perform if different
+			if (this.smoothing != smoothing) { // perform if different | TODO fix with smoothing data
 				float[] tempData = new float[length + smoothing]; // create new buffer
 				System.arraycopy(data, this.smoothing, tempData, smoothing, length); // copy into new buffer
 				data = tempData; // replace data with new buffer
 				this.smoothing = smoothing; // set new smoothing level
 
 				// TODO recalc drawData
+			}
+		}
+
+		public void setMaxValue(float maxValue) {
+			this.maxValue = maxValue;
+			// TODO recalc drawvalues w/ smoothing
+			for (int i = 0; i < drawData.length; i++) {
+				drawData[i] = PApplet.constrain(data[i], 0, maxValue - 1) * (dimensions.y / maxValue);
 			}
 		}
 
@@ -487,8 +569,13 @@ public class ScrollMonitor {
 			this.active = active;
 		}
 
-		public void getDrawData() {
-			// return y values
+		/**
+		 * Get draw data that is logically at the index given (0 is left most datapoint)
+		 * @param index
+		 * @return
+		 */
+		public float getDrawData(int index) {
+			return drawData[(pointer + index) % (length + smoothing)];
 		}
 
 		/**
