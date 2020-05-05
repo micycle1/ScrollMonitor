@@ -30,7 +30,7 @@ public class ScrollMonitor {
 	private HashMap<String, DataStream> streams; // TODO
 	private final HashMap<Integer, Integer> streamColours;
 	private final ArrayList<Integer> streamSmoothing; // TODO change to hashmap if allow out-of-order stream iteration
-	private final float max;
+	private float max;
 	private boolean fill = true;
 
 	// private SortedMap<DataStream, Integer> todo; // TODO, ordered iteration
@@ -188,11 +188,12 @@ public class ScrollMonitor {
 			position.set(PVector.sub(mousePos, mouseDownPos).add(cachePos)); // dragging
 		}
 
-		g.fill(255, 225); // bg
+		g.fill(255, 200); // bg
 		g.noStroke();
+		// g.stroke(255, 255, 0); // TODO
 		g.rect(position.x, position.y, dimensions.x, dimensions.y); // bg
 
-		g.stroke(255, 150); // guidelines
+		g.stroke(0, 200); // guidelines
 		g.strokeWeight(1); // guidelines
 		float segments = 4;
 		for (int i = 1; i < segments; i++) {
@@ -200,7 +201,7 @@ public class ScrollMonitor {
 					position.x + dimensions.x, position.y + dimensions.y - i * (dimensions.y / (segments + 0)));
 		}
 
-		g.strokeWeight(2);
+		g.strokeWeight(3);
 		int dataIndex = 0; // datastream index
 		g.noFill(); // nofill here
 		for (float[] stream : data) {
@@ -210,26 +211,13 @@ public class ScrollMonitor {
 			}
 			g.beginShape();
 
-			// for (int i = 0; i < streamSmoothing.get(dataIndex); i++) { // dont smooth first values
-			// float x = position.x + i * (dimensions.x / stream.length); // calc x coord -- scale to x dimension
-			// int in = (i + pointers.get(dataIndex)-1) % stream.length;
-			// float val = PApplet.constrain(stream[in], 0, max) * (dimensions.y / max);
-			// float y = (position.y + dimensions.y) - val;
-			// g.vertex(x, y);
-			// }
-
-			// for (int i = streamSmoothing.get(dataIndex); i < stream.length + 1; i++) {
-			//
-			// }
-
-			// TODO ignore smoothing for first 'streamSmoothing.get(dataIndex)' values
-
 			// TODO BUFFER NEEDS TO BE OF SIZE: stream.length+streamSmoothing.get(dataIndex)
 			float[] vertx = new float[stream.length + 2];
 			float[] verty = new float[stream.length + 2];
 
 			float pVertX = position.x;
 			float pVertY = position.y;
+			float tempMax = 0;
 			for (int i = 0; i < stream.length + 1; i++) { // plot datapoint vertices
 				float x = position.x + i * (dimensions.x / stream.length); // calc x coord -- scale to x dimension
 
@@ -247,6 +235,8 @@ public class ScrollMonitor {
 				} else {
 					val = stream[(i + pointers.get(dataIndex)) % stream.length]; // raw val
 				}
+				tempMax = PApplet.max(max, val);
+				max = tempMax;
 
 				float y = (position.y + dimensions.y) - PApplet.ceil(val);
 				vertx[i] = x; // push vertex to array
@@ -315,7 +305,7 @@ public class ScrollMonitor {
 	private void mousePressed(MouseEvent e) {
 		mouseDownPos = new PVector(p.mouseX, p.mouseY);
 
-		if (withinRegion(mouseDownPos, position, PVector.add(position, dimensions))) {
+		if (e.getButton() == PApplet.LEFT && withinRegion(mouseDownPos, position, PVector.add(position, dimensions))) {
 			System.out.println("over");
 			p.cursor(PApplet.MOVE); // ARROW, CROSS, HAND, MOVE, TEXT, or WAIT
 			cachePos = position.copy();
@@ -402,9 +392,13 @@ public class ScrollMonitor {
 		 */
 		int smoothing;
 		/**
-		 * Data
+		 * Data (raw)
 		 */
 		float[] data;
+		/**
+		 * Data used to draw points (vals)
+		 */
+		float[] drawData;
 		/**
 		 * Can be drawn / data pushed to it?
 		 */
@@ -418,18 +412,55 @@ public class ScrollMonitor {
 		 */
 		int length;
 
+		/**
+		 * todo auto push negative so it always scrolls?
+		 * Scrolls to accomdate new data only vs will always scroll 
+		 * @param name
+		 */
 		public DataStream(String name) {
 			this.name = name;
 			active = true;
 			smoothing = 0;
 			pointer = smoothing; // start at smoothing _____[]......
 			data = new float[length + smoothing];
+			data[0] = Float.MAX_VALUE;
 			// TODO Auto-generated constructor stub
 		}
 
-		public void push(float n) {
-			data[pointer] = n;
-			pointer++;
+		/**
+		 * varargs
+		 * @param datum datapoints
+		 */
+		public void push(float datum) {
+			
+			if (pointer == 0 && this.data[0] == Float.MAX_VALUE) { // fill last values with moving average data 
+				for (int i = 0; i < smoothing; i++) {
+					this.data[length+smoothing-i] = datum;
+				}
+			}
+			
+			this.data[pointer] = datum; // push raw datum
+
+			float drawData = datum; // sum of moving average
+			for (int i = 0; i < smoothing; i++) { // calc moving average
+				int newPointer = pointer - 1 - i; // pointer to historical datum
+				int newPointer2 = Math.floorMod(pointer - 1 - i, length+smoothing);
+				drawData += this.data[newPointer2]; // sum moving average
+			}
+			drawData /= (smoothing + 1); // divide to get average
+			this.drawData[pointer - smoothing] = drawData; // push draw data
+
+			pointer++; // inc pointer
+//			pointer = ((pointer % length) + smoothing) % (length + smoothing); // recalc pointer (offset to active part of data array)
+			pointer%=(length+smoothing);
+			
+//			smoothing - pointer
+		}
+
+		public void pushEmpty() {
+			// push no data, but scroll monitor
+			// hook onto post? using last frame
+			// move to scrollmonitor class
 		}
 
 		/**
@@ -441,9 +472,10 @@ public class ScrollMonitor {
 			if (this.smoothing != smoothing) { // perform if different
 				float[] tempData = new float[length + smoothing]; // create new buffer
 				System.arraycopy(data, this.smoothing, tempData, smoothing, length); // copy into new buffer
-
 				data = tempData; // replace data with new buffer
 				this.smoothing = smoothing; // set new smoothing level
+
+				// TODO recalc drawData
 			}
 		}
 
@@ -453,6 +485,10 @@ public class ScrollMonitor {
 
 		public void setActive(boolean active) {
 			this.active = active;
+		}
+
+		public void getDrawData() {
+			// return y values
 		}
 
 		/**
