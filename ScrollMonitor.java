@@ -86,7 +86,8 @@ public class ScrollMonitor {
 	 */
 	public ScrollMonitor(PApplet p, PVector position, PVector dimensions) {
 		this.p = p;
-		this.g = p.getGraphics();
+//		this.g = p.getGraphics();
+		g = p.createGraphics((int)dimensions.x, (int)dimensions.y);
 		this.position = position;
 		this.dimensions = dimensions;
 		data = new ArrayList<>();
@@ -190,7 +191,8 @@ public class ScrollMonitor {
 	}
 
 	public void draw2() {
-
+		g.beginDraw();
+		g.clear();
 		PVector mousePos = new PVector(p.mouseX, p.mouseY);
 		boolean mouseOverMonitor = withinRegion(mousePos, position, PVector.add(position, dimensions));
 
@@ -211,26 +213,26 @@ public class ScrollMonitor {
 
 		for (DataStream d : streams.values()) { // TODO draw back to front
 			g.stroke(255, 80, 180);
-			float pVertX = position.x; // line start x
-			float pVertY = PApplet.min((position.y + dimensions.y) - d.getDrawData(0), position.y + dimensions.y - 2);
+			float pVertX = 0; // line start x
+			float pVertY = PApplet.min((dimensions.y) - d.getDrawData(0), dimensions.y - 2);
 			g.fill(d.color);
 			g.beginShape();
 
 			for (int i = 0; i < d.length; i++) {
 				float val = d.getDrawData(i);
-				float x = position.x + i * (dimensions.x / (d.length - 1)); // calc x coord -- scale to x dimension
-				float y = (position.y + dimensions.y) - val;
+				float x = i * (dimensions.x / (d.length - 1)); // calc x coord -- scale to x dimension
+				float y = (dimensions.y) - val;
 				g.vertex(x, y);
 				if (val >= 0) { // will ignore 0 values
-					g.line(pVertX, pVertY, x, PApplet.min(y, position.y + dimensions.y - 2)); // min of 2, to account for strokeWidth
+					g.line(pVertX, pVertY, x, PApplet.min(y, dimensions.y - 2)); // min of 2, to account for strokeWidth
 					pVertX = x;
 				} else {
-					pVertX = position.x + (i + 1) * (dimensions.x / (d.length - 1)); // prevent joining up
+					pVertX = (i + 1) * (dimensions.x / (d.length - 1)); // prevent joining up
 				}
-				pVertY = PApplet.min(y, position.y + dimensions.y - 2);
+				pVertY = PApplet.min(y, dimensions.y - 2);
 			}
-			g.vertex(position.x + dimensions.x, position.y + dimensions.y); // lower right corner
-			g.vertex(position.x, position.y + dimensions.y); // lower left corner
+			g.vertex(dimensions.x, dimensions.y); // lower right corner
+			g.vertex(0, dimensions.y); // lower left corner
 			g.noStroke();
 			g.endShape(PApplet.CLOSE);
 			
@@ -243,28 +245,30 @@ public class ScrollMonitor {
 			g.text(d.getRawData(0), 30, 50);
 
 		}
+		g.endDraw();
+		p.image(g, position.x, position.y);
 	}
 
 	private void drawBG(DataStream d) {
 		g.fill(255, 200); // bg
 		g.noStroke();
 		// g.stroke(255, 255, 0); // TODO
-		g.rect(position.x, position.y, dimensions.x, dimensions.y); // bg
+		g.rect(0, 0, dimensions.x, dimensions.y); // bg
 
 		g.stroke(0, 200); // guidelines
 		g.strokeWeight(1); // guidelines
 		float hSegments = 2;
 		for (int i = 1; i < hSegments; i++) { // horizontal segments
-//			g.line(position.x, position.y + dimensions.y - i * (dimensions.y / (hSegments + 0)),
-//					position.x + dimensions.x, position.y + dimensions.y - i * (dimensions.y / (hSegments + 0)));
+			g.line(0, dimensions.y - i * (dimensions.y / (hSegments + 0)),
+					dimensions.x, dimensions.y - i * (dimensions.y / (hSegments + 0)));
 		} // calc valuse based on stream max value Y
 
 		float vSegments = 2;
 		for (int i = 0; i < vSegments; i++) { // horizontal segments
 			float xPos = Math.floorMod(
-					(int) (position.x + (i * (dimensions.x / vSegments) - (d.pushedCount * dimensions.x / d.length))),
+					(int) ((i * (dimensions.x / vSegments) - (d.pushedCount * dimensions.x / d.length))),
 					(int) dimensions.x);
-//			g.line(position.x + xPos, position.y, position.x + xPos, position.y + dimensions.y);
+			g.line(xPos, position.y, xPos, dimensions.y);
 
 		}
 	}
