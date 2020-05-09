@@ -1,6 +1,7 @@
 package pathing;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 
 import processing.core.PApplet;
@@ -29,7 +30,6 @@ public class ScrollMonitor {
 	private final HashMap<String, DataStream> streams; // TODO
 	private final HashMap<Integer, Integer> streamColours;
 	private final ArrayList<Integer> streamSmoothing; // TODO change to hashmap if allow out-of-order stream iteration
-	private float max;
 	private boolean fill = true;
 
 	// private SortedMap<DataStream, Integer> todo; // TODO, ordered iteration
@@ -84,7 +84,7 @@ public class ScrollMonitor {
 	 * @param dimensions size of scroll graph
 	 * @param max  leave empty for auto scale?
 	 */
-	public ScrollMonitor(PApplet p, PVector position, PVector dimensions, float max) {
+	public ScrollMonitor(PApplet p, PVector position, PVector dimensions) {
 		this.p = p;
 		this.g = p.getGraphics();
 		this.position = position;
@@ -95,7 +95,6 @@ public class ScrollMonitor {
 		streamColours = new HashMap<>();
 		streamSmoothing = new ArrayList<>();
 		streams = new HashMap<>();
-		this.max = max;
 		p.registerMethod("mouseEvent", this);
 	}
 
@@ -205,32 +204,48 @@ public class ScrollMonitor {
 			position.set(PVector.sub(mousePos, mouseDownPos).add(cachePos)); // dragging
 		}
 
-		drawBG();
+		drawBG(streams.values().iterator().next());
 
-		g.fill(125, 200, 100, 170);
+		// g.fill(125, 200, 100, 170);
 		g.strokeWeight(3);
-		g.stroke(255, 0, 0, 200);
-		// g.noStroke();
-		for (DataStream d : streams.values()) {
 
+		for (DataStream d : streams.values()) { // TODO draw back to front
+			g.stroke(255, 80, 180);
+			float pVertX = position.x; // line start x
+			float pVertY = PApplet.min((position.y + dimensions.y) - d.getDrawData(0), position.y + dimensions.y - 2);
+			g.fill(d.color);
 			g.beginShape();
-			int datumIndex = 0;
 
 			for (int i = 0; i < d.length; i++) {
 				float val = d.getDrawData(i);
-				float x = position.x + datumIndex * (dimensions.x / d.length); // calc x coord -- scale to x dimension
-				float y = (position.y + dimensions.y) - PApplet.ceil(val);
+				float x = position.x + i * (dimensions.x / (d.length - 1)); // calc x coord -- scale to x dimension
+				float y = (position.y + dimensions.y) - val;
 				g.vertex(x, y);
-				datumIndex++;
+				if (val >= 0) { // will ignore 0 values
+					g.line(pVertX, pVertY, x, PApplet.min(y, position.y + dimensions.y - 2)); // min of 2, to account for strokeWidth
+					pVertX = x;
+				} else {
+					pVertX = position.x + (i + 1) * (dimensions.x / (d.length - 1)); // prevent joining up
+				}
+				pVertY = PApplet.min(y, position.y + dimensions.y - 2);
 			}
 			g.vertex(position.x + dimensions.x, position.y + dimensions.y); // lower right corner
 			g.vertex(position.x, position.y + dimensions.y); // lower left corner
+			g.noStroke();
 			g.endShape(PApplet.CLOSE);
+			
+			for (int i = 0; i < d.length; i++) { // draw outline on top
+				
+			}
+			
+			g.fill(255);
+			g.text(d.getDrawData(0), 30, 30);
+			g.text(d.getRawData(0), 30, 50);
 
 		}
 	}
 
-	private void drawBG() {
+	private void drawBG(DataStream d) {
 		g.fill(255, 200); // bg
 		g.noStroke();
 		// g.stroke(255, 255, 0); // TODO
@@ -238,10 +253,19 @@ public class ScrollMonitor {
 
 		g.stroke(0, 200); // guidelines
 		g.strokeWeight(1); // guidelines
-		float segments = 4;
-		for (int i = 1; i < segments; i++) {
-			g.line(position.x, position.y + dimensions.y - i * (dimensions.y / (segments + 0)),
-					position.x + dimensions.x, position.y + dimensions.y - i * (dimensions.y / (segments + 0)));
+		float hSegments = 2;
+		for (int i = 1; i < hSegments; i++) { // horizontal segments
+//			g.line(position.x, position.y + dimensions.y - i * (dimensions.y / (hSegments + 0)),
+//					position.x + dimensions.x, position.y + dimensions.y - i * (dimensions.y / (hSegments + 0)));
+		} // calc valuse based on stream max value Y
+
+		float vSegments = 2;
+		for (int i = 0; i < vSegments; i++) { // horizontal segments
+			float xPos = Math.floorMod(
+					(int) (position.x + (i * (dimensions.x / vSegments) - (d.pushedCount * dimensions.x / d.length))),
+					(int) dimensions.x);
+//			g.line(position.x + xPos, position.y, position.x + xPos, position.y + dimensions.y);
+
 		}
 	}
 
@@ -276,13 +300,13 @@ public class ScrollMonitor {
 		g.strokeWeight(3);
 		int dataIndex = 0; // datastream index
 		g.noFill(); // nofill here
+		float max = 250;
 		for (float[] stream : data) {
 			g.stroke(streamColours.get(dataIndex));
 			if (fill) {
 				g.fill(streamColours.get(dataIndex), 100);
 			}
 			g.beginShape();
-
 
 			float[] vertx = new float[stream.length + 2];
 			float[] verty = new float[stream.length + 2];
@@ -331,7 +355,7 @@ public class ScrollMonitor {
 				vertx[stream.length + 1] = position.x;
 				verty[stream.length + 1] = position.y + dimensions.y;
 
-				if (mouseOverMonitor && mouseOverPoly(vertx, verty, mousePos)) {
+				if (mouseOverMonitor && mouseOverPoly(vertx, verty, mousePos)) { // short circuit on easier test
 					g.fill(streamColours.get(dataIndex), 145);
 				}
 				g.noStroke();
@@ -433,6 +457,7 @@ public class ScrollMonitor {
 	}
 
 	/**
+	 * Encapsulates
 	 * Container for data, index, queue position, etc.
 	 * Supports smoothing in the form of a moving average. To this end, the length of the 
 	 * data array must be of size= size+smoothingSize so the first data item we want 
@@ -441,7 +466,7 @@ public class ScrollMonitor {
 	 * @author micycle1
 	 *
 	 */
-	class DataStream implements Comparable<DataStream> {
+	private class DataStream implements Comparable<DataStream> {
 
 		/**
 		 * Position in queue
@@ -484,6 +509,7 @@ public class ScrollMonitor {
 		 */
 		final int length;
 		int direction = 1; // 1 scroll to left; -1 scroll to right
+		int pushedCount = 0;
 
 		/**
 		 * todo auto push negative so it always scrolls?
@@ -497,8 +523,13 @@ public class ScrollMonitor {
 			smoothing = 0;
 			pointer = 0;
 			data = new float[length + smoothing];
-			color = 0 - (255 << 8);
+			Arrays.fill(data, -1); // init to -1 so not drawn by stroke
+			System.out.println(data[19]);
+			data[0] = Float.MAX_VALUE;
+			color = p.color(50, 50, 130, 150);
 			drawData = new float[length];
+			Arrays.fill(drawData, -1); // init to -1 so not drawn by stroke
+			System.out.println(drawData[123]);
 			// TODO Auto-generated constructor stub
 		}
 
@@ -508,7 +539,9 @@ public class ScrollMonitor {
 		 */
 		public void push(float datum) {
 
-			if (pointer == 0 && this.data[0] == Float.MAX_VALUE) { // fill last values with moving average data
+			if (pointer == 0 && this.data[0] == Float.MAX_VALUE) { // on first data, generate moving average data, append to end of array because pointer starts at 0, so will look
+																	// backwards for history
+				System.out.println("fill");
 				for (int i = 0; i < smoothing; i++) {
 					this.data[length + smoothing - i] = datum;
 				}
@@ -522,19 +555,20 @@ public class ScrollMonitor {
 				drawData += this.data[newPointer]; // sum moving average
 			}
 			drawData /= (smoothing + 1); // divide to get average
-			 
-			this.drawData[Math.floorMod(pointer-smoothing-1, length + smoothing)] = PApplet.constrain(drawData, 0, maxValue - 1)
-					* (dimensions.y / maxValue); // constrain & scale (-1 is stroke Weight)
+
+			this.drawData[Math.floorMod(pointer - smoothing - 1, length + smoothing)] = PApplet.constrain(drawData, 0,
+					maxValue - 1) * (dimensions.y / maxValue); // constrain & scale (-1 is stroke Weight)
 
 			pointer++; // inc pointer
 			// pointer = ((pointer % length) + smoothing) % (length + smoothing); // recalc pointer (offset to active part of data array)
 			pointer %= (length + smoothing);
 
 			// smoothing - pointer
+			pushedCount++;
 		}
 
 		public void pushEmpty() {
-			push(Float.MAX_VALUE); // TODO
+			push(-1); // TODO
 		}
 
 		/**
@@ -570,12 +604,24 @@ public class ScrollMonitor {
 		}
 
 		/**
-		 * Get draw data that is logically at the index given (0 is left most datapoint)
+		 * Get draw data that is logically at the index given (where 0 is left most datapoint)
+		 * or, ordered by recency, where 0 is oldest data point
 		 * @param index
 		 * @return
 		 */
 		public float getDrawData(int index) {
-			return drawData[(pointer + index) % (length + smoothing)];
+			int i = Math.floorMod(pointer + index - 1, length + smoothing); // -1, because pointer is incremented after push
+			return drawData[i];
+		}
+		
+		/**
+		 * Get draw data that is logically at the index given (where 0 is left most datapoint)
+		 * @param index
+		 * @return
+		 */
+		public float getRawData(int index) {
+			int i = Math.floorMod((pointer + index - 1)-(length), length + smoothing); // -1, because pointer is incremented after push
+			return data[index];
 		}
 
 		/**
@@ -591,5 +637,4 @@ public class ScrollMonitor {
 			return -1;
 		}
 	}
-
 }
