@@ -1,6 +1,8 @@
 package micycle.scrollMonitor;
 
 import static processing.core.PApplet.constrain;
+import static processing.core.PApplet.max;
+import static processing.core.PApplet.min;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -8,6 +10,7 @@ import java.util.HashMap;
 import javafx.scene.Cursor;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
+
 import processing.core.PApplet;
 import processing.core.PGraphics;
 import processing.core.PShape;
@@ -15,9 +18,12 @@ import processing.core.PVector;
 import processing.event.MouseEvent;
 
 /**
- * Add, push then draw
- * Each graph can contain multiple datastreams.
- * TODO change settings (mouseover etc) + drag + pause + mouseover value + toggle stream visibility+order
+ * Add, push then draw Each graph can contain multiple datastreams. TODO change
+ * settings (mouseover etc) + drag + pause + mouseover value + toggle stream
+ * visibility+order
+ * 
+ * TODO: datastream defines how many datapoints are visible from each stream (global) or per-stream?
+ * 
  * @author micycle1
  *
  */
@@ -31,35 +37,51 @@ public class ScrollMonitor {
 	// private SortedMap<DataStream, Integer> todo; // TODO, ordered iteration
 
 	private PVector mousePos, mouseDownPos;
-	private PVector cachePos, cacheDimensions;
+	
 	/**
-	 * drag border buffer
+	 * drag border bufferminimumDimensions
+	 * The maximum (x,y) offset from sides the mouse can be 
 	 */
-	private final PVector buffer;
+	private final PVector mouseResizeBuffer;
+	
 	private boolean dragging = false, resizing = false;
+	
+	/**
+	 * Both used during resizing/moving the graph.
+	 */
+	private PVector cachePos, cacheDimensions;
 
-	private enum SIDES {
-		LEFT, RIGHT, TOP, BOTTOM
-	};
-	private SIDES resizeSide;
-
+	/**
+	 * Tracks from which side(s) the monitor is being resized.
+	 */
 	private boolean[] resizeSides = new boolean[4]; // L,U,D,R
+	
+	/**
+	 * Allow/prevent end-user from moving/resizing monitor. 
+	 */
 	private boolean lockPosition, lockDimensions; // TODO
+	
+	/**
+	 * Is the mouse over any datastream (if true, don't allow move)
+	 */
 	private boolean mouseOverDatastream = false;
+	
+	private final PVector minimumDimensions;
 
 	private enum RENDERERS {
 		JAVA2D, JAVAFX, P2D
 	} // todo find renderer, then use to set horizontal/vert cursor
+
 	private final RENDERERS renderer;
 
 	private Scene pAppletFXscene = null;
 
 	/**
 	 * 
-	 * @param g parent papplet
-	 * @param position top left corner
-	 * @param dimensions size of scroll graph
-	 * @param max  leave empty for auto scale?
+	 * @param p          Parent PApplet
+	 * @param position   (initial) position (of top left corner)
+	 * @param dimensions (initial) size of scroll graph
+	 * @param max        leave empty for auto scale?
 	 */
 	public ScrollMonitor(PApplet p, PVector position, PVector dimensions) {
 		this.p = p;
@@ -67,7 +89,8 @@ public class ScrollMonitor {
 		g = p.createGraphics((int) dimensions.x, (int) dimensions.y);
 		this.position = position;
 		this.dimensions = dimensions;
-		buffer = new PVector(20, 20);
+		mouseResizeBuffer = new PVector(20, 20);
+		minimumDimensions = new PVector(150, 100);
 
 		streams = new HashMap<>();
 		p.registerMethod("mouseEvent", this);
@@ -80,7 +103,6 @@ public class ScrollMonitor {
 			case "processing.awt.PGraphicsJava2D" :
 				renderer = RENDERERS.JAVA2D;
 				break;
-
 			default :
 				renderer = RENDERERS.JAVA2D; // or null?
 				break;
@@ -88,60 +110,34 @@ public class ScrollMonitor {
 	}
 
 	/**
-	 * strng name also / ID
+	 * 
+	 * @param name
 	 * @param historyCap
 	 */
 	public void addDataStream(String name, int historyCap) {
-		// float[] data = new float[historyCap];
-		// Arrays.fill(data, -1); // init to -1 so not drawn by stroke
-		// this.data.add(data);
-		// pointers.add(0);
-		// streamSmoothing.add(1); // default smoothing: (1=none)
-
 		streams.put(name, new DataStream(name, historyCap));
 	}
 
-	// /**
-	// * strng name also / ID
-	// * @param historyCap
-	// */
-	// public void addDataStream(int historyCap, String name, int color) {
-	// float[] data = new float[historyCap];
-	// Arrays.fill(data, -1);
-	// this.data.add(data);
-	// pointers.add(0);
-	// streamNamesIndex.put(name, this.data.size() - 1);
-	// streamColours.put(this.data.size() - 1, color);
-	// streamSmoothing.add(1); // default smoothing: (1=none)
-	// }
-
-	// /**
-	// * Push new data to a stream identified by its index.
-	// * @param dataStream
-	// * @param n
-	// */
-	// public void push(int dataStream, float n) {
-	// data.get(dataStream)[pointers.get(dataStream)] = n;
-	// pointers.set(dataStream, (pointers.get(dataStream) + 1) % data.get(dataStream).length);
-	// }
-
 	/**
 	 * Push new data to a stream identified by its name.
+	 * 
 	 * @param dataStreamName
 	 * @param n
 	 */
 	public void push(String dataStreamName, float n) {
 		// int dataStream = streamNamesIndex.get(dataStreamName);
 		// data.get(dataStream)[pointers.get(dataStream)] = n;
-		// pointers.set(dataStream, (pointers.get(dataStream) + 1) % data.get(dataStream).length);
+		// pointers.set(dataStream, (pointers.get(dataStream) + 1) %
+		// data.get(dataStream).length);
 		streams.get(dataStreamName).push(n);
 	}
 
 	/**
-	 * Set the level of visual smoothing a stream has using a equal-weighted moving average of the last n terms
-	 * TODO INCREASE STREAM SIZE BY SMOOTHING AMOUNT
+	 * Set the level of visual smoothing a stream has using a equal-weighted moving
+	 * average of the last n terms TODO INCREASE STREAM SIZE BY SMOOTHING AMOUNT
+	 * 
 	 * @param dataStreamName
-	 * @param smoothing default = 1 == no smoothing; must be >=1
+	 * @param smoothing      default = 1 == no smoothing; must be >=1
 	 */
 	public void setSmoothing(String dataStreamName, int smoothing) {
 		streams.get(dataStreamName).setSmoothing(smoothing);
@@ -176,6 +172,7 @@ public class ScrollMonitor {
 
 	/**
 	 * draw a specifed datastream
+	 * 
 	 * @param dataStream
 	 */
 	public void draw(String dataStream) {
@@ -186,12 +183,16 @@ public class ScrollMonitor {
 		// todo register this instead?
 	}
 
+	/**
+	 * TODO decompose into calc() + draw()
+	 */
 	public void draw() {
 
-		mousePos = new PVector(PApplet.max(p.mouseX, 0), PApplet.max(p.mouseY, 0));
-		boolean mouseOverMonitor = withinRegion(mousePos, position, PVector.add(position, dimensions)); // mouseover rect region?
-		boolean withinMoveRegion = withinRegion(mousePos, PVector.add(position, buffer),
-				PVector.add(position, dimensions).sub(buffer));
+		mousePos = new PVector(max(p.mouseX, 0), max(p.mouseY, 0));
+		boolean mouseOverMonitor = withinRegion(mousePos, position, PVector.add(position, dimensions)); // mouseover
+																										// rect region?
+		boolean withinMoveRegion = withinRegion(mousePos, PVector.add(position, mouseResizeBuffer),
+				PVector.add(position, dimensions).sub(mouseResizeBuffer));
 
 		if (!dragging) { // dragging = false;
 			if (resizing) {
@@ -252,7 +253,9 @@ public class ScrollMonitor {
 				graph.vertex(x, y);
 			}
 
-			graph.vertex(dimensions.x + strokeWeight, (dimensions.y) - d.getDrawData(d.length - 1)); // draw out of bounds to hide stroke
+			graph.vertex(dimensions.x + strokeWeight, (dimensions.y) - d.getDrawData(d.length - 1)); // draw out of
+																										// bounds to
+																										// hide stroke
 			graph.vertex(dimensions.x + strokeWeight, dimensions.y + strokeWeight); // lower right corner
 			graph.vertex(-strokeWeight, dimensions.y + strokeWeight); // lower left corner
 
@@ -275,7 +278,7 @@ public class ScrollMonitor {
 						position.x + dimensions.x - strokeWeight + 1) - position.x; // constrain mouseOverX
 				float valAtMouse = d.getDrawData((int) (x / (dimensions.x / (d.length - 1))));
 				g.stroke(d.fillColour);
-				g.strokeWeight(PApplet.max(1, strokeWeight - 1));
+				g.strokeWeight(max(1, strokeWeight - 1));
 				g.line(x, dimensions.y, x, dimensions.y - valAtMouse + (strokeWeight - 1)); // line where mouse is
 				g.text(valAtMouse, 30, 70);
 			}
@@ -286,17 +289,17 @@ public class ScrollMonitor {
 
 	private void calcSidesMouseOver() {
 		resizeSides[0] = resizeSides[0] = withinRegion(mousePos, position,
-				PVector.add(position, new PVector(buffer.x, dimensions.y - buffer.x))); // left side
+				PVector.add(position, new PVector(mouseResizeBuffer.x, dimensions.y - mouseResizeBuffer.x))); // left side
 		resizeSides[1] = withinRegion(mousePos, position,
-				PVector.add(position, new PVector(dimensions.x + buffer.x, buffer.y))); // top side
+				PVector.add(position, new PVector(dimensions.x + mouseResizeBuffer.x, mouseResizeBuffer.y))); // top side
 		resizeSides[2] = withinRegion(mousePos, new PVector(0, dimensions.y).add(position),
-				new PVector(dimensions.x, dimensions.y).add(position).sub(buffer)); // bottom side
+				new PVector(dimensions.x, dimensions.y).add(position).sub(mouseResizeBuffer)); // bottom side
 		resizeSides[3] = withinRegion(mousePos, new PVector(dimensions.x, 0).add(position),
-				new PVector(dimensions.x - buffer.x, dimensions.y - buffer.y).add(position)); // right side
+				new PVector(dimensions.x - mouseResizeBuffer.x, dimensions.y - mouseResizeBuffer.y).add(position)); // right side
 	}
 
 	/**
-	 * Set edge cursor in JavaFX mode 
+	 * Set edge cursor in JavaFX mode
 	 */
 	private void cursorFX() {
 		// L,U,D,R
@@ -326,28 +329,28 @@ public class ScrollMonitor {
 	}
 
 	private void resize() {
-		PVector minSize = new PVector(25, 10);
-		PVector posBound = PVector.add(cachePos, cacheDimensions).sub(minSize); // stops moving the monitor when resizing past prior edge
+		PVector posBound = PVector.add(cachePos, cacheDimensions).sub(minimumDimensions); // stops moving the monitor when
+																				// resizing past prior edge
 		PVector newDims = PVector.add(cacheDimensions, cachePos).sub(mousePos);
-		newDims.set(PApplet.max(newDims.x, minSize.x), PApplet.max(newDims.y, minSize.y));
-		
+		newDims.set(max(newDims.x, minimumDimensions.x), max(newDims.y, minimumDimensions.y));
+
 		if (resizeSides[0]) { // LEFT SIDE
 			if (resizeSides[1]) { // â†–
-				position.set(PApplet.min(mousePos.x, posBound.x), PApplet.min(mousePos.y, posBound.y));
+				position.set(min(mousePos.x, posBound.x), min(mousePos.y, posBound.y));
 				dimensions.set(newDims.x, newDims.y);
 			} else if (resizeSides[2]) { // â†™
-				position.set(PApplet.min(mousePos.x, posBound.x), PApplet.min(mousePos.y, posBound.y));
+				position.set(min(mousePos.x, posBound.x), min(mousePos.y, posBound.y));
 				dimensions.set(newDims.x, newDims.y);
 			} else { // â†�
-				position.set(PApplet.min(mousePos.x, posBound.x), position.y);
+				position.set(min(mousePos.x, posBound.x), position.y);
 				dimensions.set(newDims.x, dimensions.y);
 			}
 		} else if (resizeSides[1]) { // TOP SIDE
 			if (resizeSides[3]) { // â†—
-				position.set(position.x, PApplet.min(mousePos.y, posBound.y));
+				position.set(position.x, min(mousePos.y, posBound.y));
 				dimensions.set(newDims.x, newDims.y);
 			} else { // â†‘
-				position.set(position.x, PApplet.min(mousePos.y, posBound.y));
+				position.set(position.x, min(mousePos.y, posBound.y));
 				dimensions.set(dimensions.x, newDims.y);
 			}
 		} else if (resizeSides[2]) { // BOTTOM SIDE
@@ -360,30 +363,45 @@ public class ScrollMonitor {
 
 		}
 		g = p.createGraphics((int) dimensions.x, (int) dimensions.y);
-		DataStream d= streams.values().iterator().next(); // TODO: redraw height of existing
+		DataStream d = streams.values().iterator().next(); // TODO: redraw height of existing
 		d.setMaxValue(d.maxValue); // TODO
 	}
 
+	/**
+	 * Hide monitor -- does not prevent data being pushed to streams.
+	 */
 	public void hide() {
 		// TODO
 	}
-
+	
+	/**
+	 * Show monitor
+	 */
 	public void show() {
 		// TODO
 	}
 
+	/**
+	 * Hide a specific Datastream from being displayed, given by it's name.
+	 * @param dataStream
+	 */
 	public void hideStream(String dataStream) {
 		// TODO
 	}
 
 	/**
 	 * Enable visibility for a datastream
+	 * 
 	 * @param dataStream
 	 */
 	public void showStream(String dataStream) {
 		// TODO
 	}
 
+	/**
+	 * Draws graph background (fill and line segments)
+	 * @param d
+	 */
 	private void drawBG(DataStream d) {
 		g.fill(255, 200); // bg
 		g.noStroke();
@@ -410,8 +428,10 @@ public class ScrollMonitor {
 
 	/**
 	 * This method is <b>public</b> only to enable binding to a parent PApplet.
-	 * <p>You can <b>ignore this method</b> since the parent sketch will call it automatically
-	 * when it detects a mouse event (provided register() has been called).
+	 * <p>
+	 * You can <b>ignore this method</b> since the parent sketch will call it
+	 * automatically when it detects a mouse event (provided register() has been
+	 * called).
 	 */
 	public final void mouseEvent(MouseEvent e) {
 		switch (e.getAction()) {
@@ -436,8 +456,11 @@ public class ScrollMonitor {
 	}
 
 	/**
-	 * Called automatically when the parent PApplet issues a <b>PRESS</b> {@link processing.event.MouseEvent MouseEvent}.
-	 * <p>Therefore write any code here that should be executed when the mouse is <b>pressed</b>.
+	 * Called automatically when the parent PApplet issues a <b>PRESS</b>
+	 * {@link processing.event.MouseEvent MouseEvent}.
+	 * <p>
+	 * Therefore write any code here that should be executed when the mouse is
+	 * <b>pressed</b>.
 	 */
 	private void mousePressed(MouseEvent e) {
 		mouseDownPos = new PVector(p.mouseX, p.mouseY);
@@ -445,8 +468,8 @@ public class ScrollMonitor {
 		if (e.getButton() == PApplet.LEFT && !mouseOverDatastream) {
 			boolean withinTotalRegion = withinRegion(mouseDownPos, position, PVector.add(position, dimensions));
 			if (withinTotalRegion) {
-				boolean withinMoveRegion = withinRegion(mouseDownPos, PVector.add(position, buffer),
-						PVector.add(position, dimensions).sub(buffer));
+				boolean withinMoveRegion = withinRegion(mouseDownPos, PVector.add(position, mouseResizeBuffer),
+						PVector.add(position, dimensions).sub(mouseResizeBuffer));
 				cachePos = position.copy();
 				if (withinMoveRegion) { // move
 					p.cursor(PApplet.MOVE); // ARROW, CROSS, HAND, MOVE, TEXT, or WAIT
@@ -461,8 +484,11 @@ public class ScrollMonitor {
 	}
 
 	/**
-	 * Called automatically when the parent PApplet issues a <b>RELEASE</b> {@link processing.event.MouseEvent MouseEvent}.
-	 * <p>Therefore write any code here that should be executed when the mouse is <b>released</b>.
+	 * Called automatically when the parent PApplet issues a <b>RELEASE</b>
+	 * {@link processing.event.MouseEvent MouseEvent}.
+	 * <p>
+	 * Therefore write any code here that should be executed when the mouse is
+	 * <b>released</b>.
 	 */
 	private void mouseReleased(MouseEvent e) {
 		dragging = false;
@@ -471,25 +497,35 @@ public class ScrollMonitor {
 	}
 
 	/**
-	 * Called automatically when the parent PApplet issues a <b>CLICK</b> {@link processing.event.MouseEvent MouseEvent}.
-	 * <p>Therefore write any code here that should be executed when the mouse is <b>clicked</b>. 
-	 * (a press and release in quick succession).
+	 * Called automatically when the parent PApplet issues a <b>CLICK</b>
+	 * {@link processing.event.MouseEvent MouseEvent}.
+	 * <p>
+	 * Therefore write any code here that should be executed when the mouse is
+	 * <b>clicked</b>. (a press and release in quick succession).
 	 */
 	private void mouseClicked(MouseEvent e) {
 	}
 
 	/**
-	 * Called automatically when the parent PApplet issues a <b>WHEEL</b> {@link processing.event.MouseEvent MouseEvent}.
-	 * <p>Therefore write any code here that should be executed when the mouse wheel is <b>scrolled</b>.
-	 * <p> Use the getCount() method of the MouseEvent e parameter to get the scroll direction.
+	 * Called automatically when the parent PApplet issues a <b>WHEEL</b>
+	 * {@link processing.event.MouseEvent MouseEvent}.
+	 * <p>
+	 * Therefore write any code here that should be executed when the mouse wheel is
+	 * <b>scrolled</b>.
+	 * <p>
+	 * Use the getCount() method of the MouseEvent e parameter to get the scroll
+	 * direction.
 	 */
 	private void mouseWheel(MouseEvent e) {
-		// streams.values().iterator().next().length+= e.getAction()*50;
+		// streams.values().iterator().next().length+= e.getAction()*50; // TODO change stream display data length
 	}
 
 	/**
-	 * Called automatically when the parent PApplet issues a <b>DRAG</b> {@link processing.event.MouseEvent MouseEvent}.
-	 * <p>Therefore write any code here that should be executed when the mouse is <b>dragged</b>.
+	 * Called automatically when the parent PApplet issues a <b>DRAG</b>
+	 * {@link processing.event.MouseEvent MouseEvent}.
+	 * <p>
+	 * Therefore write any code here that should be executed when the mouse is
+	 * <b>dragged</b>.
 	 */
 	private void mouseDragged(MouseEvent e) {
 		if (resizing) {
@@ -499,9 +535,10 @@ public class ScrollMonitor {
 
 	/**
 	 * Determine if a point is within a rectangular region -- PVector params.
+	 * 
 	 * @param point PVector position to test.
-	 * @param UL Corner one of region.
-	 * @param BR Corner two of region (different X & Y).
+	 * @param UL    Corner one of region.
+	 * @param BR    Corner two of region (different X & Y).
 	 * @return True if point contained in region.
 	 */
 	private static boolean withinRegion(PVector point, PVector UL, PVector BR) {
@@ -520,13 +557,13 @@ public class ScrollMonitor {
 	}
 
 	/**
-	 * Encapsulates
-	 * Container for data, index, queue position, etc.
-	 * Supports smoothing in the form of a moving average. To this end, the length of the 
-	 * data array must be of size= size+smoothingSize so the first data item we want 
-	 * to see can be smoothed, rather than skipping the first smoothingSize items. 
-	 * TODO dynamic ordering / opacity based on mouse-over/highest value
-	 * TODO max datapoint/history size (purged thereafter) & viewable datapoints,
+	 * Encapsulates Container for data, index, queue position, etc. Supports
+	 * smoothing in the form of a moving average. To this end, the length of the
+	 * data array must be of size= size+smoothingSize so the first data item we want
+	 * to see can be smoothed, rather than skipping the first smoothingSize items.
+	 * TODO dynamic ordering / opacity based on mouse-over/highest value TODO max
+	 * datapoint/history size (purged thereafter) & viewable datapoints,
+	 * 
 	 * @author micycle1
 	 *
 	 */
@@ -535,13 +572,14 @@ public class ScrollMonitor {
 		/**
 		 * Position in queue
 		 */
-		int queueIndex;
+		int queueIndex; // TODO remove / move to #ScrollMonitor)
 		/**
 		 * DataStream name (identifier)
 		 */
 		final String name;
 		/**
-		 * Which index in {@link #data} is the most recent, and where iteration should start
+		 * Which index in {@link #data} is the most recent, and where iteration should
+		 * start
 		 */
 		int pointer;
 		/**
@@ -584,8 +622,9 @@ public class ScrollMonitor {
 		int pushedCount = 0;
 
 		/**
-		 * todo auto push negative so it always scrolls?
-		 * Scrolls to accomdate new data only vs will always scroll 
+		 * todo auto push negative so it always scrolls? Scrolls to accomdate new data
+		 * only vs will always scroll
+		 * 
 		 * @param name
 		 */
 		public DataStream(String name, int history) {
@@ -610,11 +649,15 @@ public class ScrollMonitor {
 
 		/**
 		 * varargs
+		 * 
 		 * @param datum datapoints
 		 */
 		public void push(float datum) {
 
-			if (pointer == 0 && this.data[0] == Float.MAX_VALUE) { // on first data, generate moving average data, append to end of array because pointer starts at 0, so will look
+			if (pointer == 0 && this.data[0] == Float.MAX_VALUE) { // on first data point, generate moving average
+																	// data,
+																	// append to end of array because pointer starts at
+																	// 0, so will look
 																	// backwards for history
 				System.out.println("fill");
 				for (int i = 0; i < smoothing; i++) {
@@ -626,7 +669,8 @@ public class ScrollMonitor {
 
 			float drawData = datum; // sum of moving average
 			for (int i = 0; i < smoothing; i++) { // calc moving average
-				int newPointer = Math.floorMod(pointer - 1 - i, length + smoothing); // pointer to previous data, can wrap around
+				int newPointer = Math.floorMod(pointer - 1 - i, length + smoothing); // pointer to previous data, can
+																						// wrap around
 				drawData += this.data[newPointer]; // sum moving average
 			}
 			drawData /= (smoothing + 1); // divide to get average
@@ -635,7 +679,8 @@ public class ScrollMonitor {
 					maxValue - 1) * (dimensions.y / maxValue); // constrain & scale (-1 is stroke Weight)
 
 			pointer++; // inc pointer
-			// pointer = ((pointer % length) + smoothing) % (length + smoothing); // recalc pointer (offset to active part of data array)
+			// pointer = ((pointer % length) + smoothing) % (length + smoothing); // recalc
+			// pointer (offset to active part of data array)
 			pointer %= (length + smoothing);
 
 			// smoothing - pointer
@@ -648,6 +693,7 @@ public class ScrollMonitor {
 
 		/**
 		 * Set new smoothing level
+		 * 
 		 * @param smoothing
 		 */
 		public void setSmoothing(int smoothing) {
@@ -679,23 +725,28 @@ public class ScrollMonitor {
 		}
 
 		/**
-		 * Get draw data that is logically at the index given (where 0 is left most datapoint)
-		 * or, ordered by recency, where 0 is oldest data point
+		 * Get draw data that is logically at the index given (where 0 is left most
+		 * datapoint) or, ordered by recency, where 0 is oldest data point
+		 * 
 		 * @param index
 		 * @return
 		 */
 		public float getDrawData(int index) {
-			int i = Math.floorMod(pointer + index - 1, length + smoothing); // -1, because pointer is incremented after push
+			int i = Math.floorMod(pointer + index - 1, length + smoothing); // -1, because pointer is incremented after
+																			// push
 			return drawData[i];
 		}
 
 		/**
-		 * Get draw data that is logically at the index given (where 0 is left most datapoint)
+		 * Get draw data that is logically at the index given (where 0 is left most
+		 * datapoint)
+		 * 
 		 * @param index
 		 * @return
 		 */
 		public float getRawData(int index) { // TODO
-			int i = Math.floorMod((pointer + index - 1) - (length), length + smoothing); // -1, because pointer is incremented after push
+			int i = Math.floorMod((pointer + index - 1) - (length), length + smoothing); // -1, because pointer is
+																							// incremented after push
 			return data[index];
 		}
 
@@ -714,8 +765,10 @@ public class ScrollMonitor {
 	}
 
 	/**
-	 * Make own class, package protected
-	 * TODO pane class (to encapsulate moving / resizing window (give it a pgraphics)? -- scrollmonitor extends... package private
+	 * Make own class, package protected TODO pane class (to encapsulate moving /
+	 * resizing window (give it a pgraphics)? -- scrollmonitor extends... package
+	 * private
+	 * 
 	 * @author micycle1
 	 *
 	 */
