@@ -1,5 +1,7 @@
 package pathing;
 
+import static processing.core.PApplet.constrain;
+
 import java.util.Arrays;
 import java.util.HashMap;
 
@@ -21,14 +23,15 @@ import processing.event.MouseEvent;
  */
 public class ScrollMonitor {
 
-	private final PGraphics g;
+	private PGraphics g;
 	private final PApplet p;
 	private final PVector dimensions, position;
 
 	private final HashMap<String, DataStream> streams;
 	// private SortedMap<DataStream, Integer> todo; // TODO, ordered iteration
 
-	private PVector mousePos, mouseDownPos, cachePos;
+	private PVector mousePos, mouseDownPos;
+	private PVector cachePos, cacheDimensions;
 	/**
 	 * drag border buffer
 	 */
@@ -39,6 +42,10 @@ public class ScrollMonitor {
 		LEFT, RIGHT, TOP, BOTTOM
 	};
 	private SIDES resizeSide;
+
+	private boolean[] resizeSides = new boolean[4]; // L,U,D,R
+	private boolean lockPosition, lockDimensions; // TODO
+	private boolean mouseOverDatastream = false;
 
 	private enum RENDERERS {
 		JAVA2D, JAVAFX, P2D
@@ -175,35 +182,46 @@ public class ScrollMonitor {
 		// TODO
 	}
 
-	public void draw() {
-		g.beginDraw();
-		g.strokeCap(PApplet.ROUND);
-		g.clear();
+	public void post() {
+		// todo register this instead?
+	}
 
-		mousePos = new PVector(p.mouseX, p.mouseY);
+	public void draw() {
+
+		mousePos = new PVector(PApplet.max(p.mouseX, 0), PApplet.max(p.mouseY, 0));
 		boolean mouseOverMonitor = withinRegion(mousePos, position, PVector.add(position, dimensions)); // mouseover rect region?
 		boolean withinMoveRegion = withinRegion(mousePos, PVector.add(position, buffer),
 				PVector.add(position, dimensions).sub(buffer));
 
-		if (!dragging) {
-			if (withinMoveRegion) { // Cursor: Move Monitor
-				p.cursor(PApplet.HAND);
-			} else if (mouseOverMonitor) { // Cursor: Resize Monitor
-				switch (renderer) {
-					case JAVAFX :
-						// todo switch based on directions
-						pAppletFXscene.setCursor(Cursor.NE_RESIZE);
-						break;
-					default :
-						p.cursor(PApplet.CROSS); // ARROW, CROSS, HAND, MOVE, TEXT, or WAIT
-						break;
+		if (!dragging) { // dragging = false;
+			if (resizing) {
+				resize(); // todo recalc pos & dimensions
+			} else {
+				if (withinMoveRegion) { // Cursor: Move Monitor
+					p.cursor(PApplet.HAND);
+				} else if (mouseOverMonitor) { // Cursor: Resize Monitor
+					calcSidesMouseOver();
+					switch (renderer) {
+						case JAVAFX :
+							// todo calc dir here
+							cursorFX();
+							break;
+						default :
+							p.cursor(PApplet.CROSS); // ARROW, CROSS, HAND, MOVE, TEXT, or WAIT
+							break;
+					}
+				} else { // default
+					p.cursor(PApplet.ARROW);
 				}
-			} else { // default
-				p.cursor(PApplet.ARROW);
 			}
-		} else {
+
+		} else { // dragging = true
 			position.set(PVector.sub(mousePos, mouseDownPos).add(cachePos)); // dragging
 		}
+
+		g.beginDraw(); // move after resize calc
+		g.strokeCap(PApplet.ROUND);
+		g.clear();
 
 		drawBG(streams.values().iterator().next()); // TODO
 
@@ -239,7 +257,7 @@ public class ScrollMonitor {
 			graph.vertex(-strokeWeight, dimensions.y + strokeWeight); // lower left corner
 
 			boolean mouseOverStream = false;
-			if (mouseOverMonitor && mouseOverPoly(graph, PVector.sub(mousePos, position))) { // mouseOver test
+			if (withinMoveRegion && mouseOverPoly(graph, PVector.sub(mousePos, position))) { // mouseOver test
 				mouseOverStream = true;
 				graph.fill(0xff000000 | ~d.fillColour, 150); // invert rgb, keep alpha
 			}
@@ -252,7 +270,8 @@ public class ScrollMonitor {
 			g.text(d.getRawData(d.pointer), 30, 50); // TODO
 
 			if (mouseOverStream) {
-				float x = PApplet.constrain(mousePos.x, position.x + strokeWeight - 1,
+				p.cursor(PApplet.CROSS);
+				float x = constrain(mousePos.x, position.x + strokeWeight - 1,
 						position.x + dimensions.x - strokeWeight + 1) - position.x; // constrain mouseOverX
 				float valAtMouse = d.getDrawData((int) (x / (dimensions.x / (d.length - 1))));
 				g.stroke(d.fillColour);
@@ -260,10 +279,109 @@ public class ScrollMonitor {
 				g.line(x, dimensions.y, x, dimensions.y - valAtMouse + (strokeWeight - 1)); // line where mouse is
 				g.text(valAtMouse, 30, 70);
 			}
-
 		}
 		g.endDraw();
 		p.image(g, position.x, position.y);
+	}
+
+	private void calcSidesMouseOver() {
+		resizeSides[0] = resizeSides[0] = withinRegion(mousePos, position,
+				PVector.add(position, new PVector(buffer.x, dimensions.y - buffer.x))); // left side
+		resizeSides[1] = withinRegion(mousePos, position,
+				PVector.add(position, new PVector(dimensions.x + buffer.x, buffer.y))); // top side
+		resizeSides[2] = withinRegion(mousePos, new PVector(0, dimensions.y).add(position),
+				new PVector(dimensions.x, dimensions.y).add(position).sub(buffer)); // bottom side
+		resizeSides[3] = withinRegion(mousePos, new PVector(dimensions.x, 0).add(position),
+				new PVector(dimensions.x - buffer.x, dimensions.y - buffer.y).add(position)); // right side
+	}
+
+	/**
+	 * Set edge cursor in JavaFX mode 
+	 */
+	private void cursorFX() {
+		// L,U,D,R
+		if (resizeSides[0]) { // LEFT SIDE
+			if (resizeSides[1]) { // ↖
+				pAppletFXscene.setCursor(Cursor.NW_RESIZE);
+			} else if (resizeSides[2]) { // ↙
+				pAppletFXscene.setCursor(Cursor.SW_RESIZE);
+			} else { // ←
+				pAppletFXscene.setCursor(Cursor.W_RESIZE);
+			}
+		} else if (resizeSides[1]) { // TOP SIDE
+			if (resizeSides[3]) { // ↗
+				pAppletFXscene.setCursor(Cursor.NE_RESIZE);
+			} else { // ↑
+				pAppletFXscene.setCursor(Cursor.N_RESIZE);
+			}
+		} else if (resizeSides[2]) { // BOTTOM SIDE
+			if (resizeSides[3]) { // ↘
+				pAppletFXscene.setCursor(Cursor.SE_RESIZE);
+			} else { // ↓
+				pAppletFXscene.setCursor(Cursor.S_RESIZE);
+			}
+		} else { // →
+			pAppletFXscene.setCursor(Cursor.E_RESIZE);
+		}
+	}
+
+	private void resize() {
+		PVector minSize = new PVector(25, 10);
+		PVector posBound = PVector.add(cachePos, cacheDimensions).sub(minSize); // stops moving the monitor when resizing past prior edge
+		PVector newDims = PVector.add(cacheDimensions, cachePos).sub(mousePos);
+		newDims.set(PApplet.max(newDims.x, minSize.x), PApplet.max(newDims.y, minSize.y));
+		
+		if (resizeSides[0]) { // LEFT SIDE
+			if (resizeSides[1]) { // ↖
+				position.set(PApplet.min(mousePos.x, posBound.x), PApplet.min(mousePos.y, posBound.y));
+				dimensions.set(newDims.x, newDims.y);
+			} else if (resizeSides[2]) { // ↙
+				position.set(PApplet.min(mousePos.x, posBound.x), PApplet.min(mousePos.y, posBound.y));
+				dimensions.set(newDims.x, newDims.y);
+			} else { // ←
+				position.set(PApplet.min(mousePos.x, posBound.x), position.y);
+				dimensions.set(newDims.x, dimensions.y);
+			}
+		} else if (resizeSides[1]) { // TOP SIDE
+			if (resizeSides[3]) { // ↗
+				position.set(position.x, PApplet.min(mousePos.y, posBound.y));
+				dimensions.set(newDims.x, newDims.y);
+			} else { // ↑
+				position.set(position.x, PApplet.min(mousePos.y, posBound.y));
+				dimensions.set(dimensions.x, newDims.y);
+			}
+		} else if (resizeSides[2]) { // BOTTOM SIDE
+			if (resizeSides[3]) { // ↘
+
+			} else { // ↓
+
+			}
+		} else { // →
+
+		}
+		g = p.createGraphics((int) dimensions.x, (int) dimensions.y);
+		DataStream d= streams.values().iterator().next(); // TODO: redraw height of existing
+		d.setMaxValue(d.maxValue); // TODO
+	}
+
+	public void hide() {
+		// TODO
+	}
+
+	public void show() {
+		// TODO
+	}
+
+	public void hideStream(String dataStream) {
+		// TODO
+	}
+
+	/**
+	 * Enable visibility for a datastream
+	 * @param dataStream
+	 */
+	public void showStream(String dataStream) {
+		// TODO
 	}
 
 	private void drawBG(DataStream d) {
@@ -324,33 +442,19 @@ public class ScrollMonitor {
 	private void mousePressed(MouseEvent e) {
 		mouseDownPos = new PVector(p.mouseX, p.mouseY);
 
-		if (e.getButton() == PApplet.LEFT) {
+		if (e.getButton() == PApplet.LEFT && !mouseOverDatastream) {
 			boolean withinTotalRegion = withinRegion(mouseDownPos, position, PVector.add(position, dimensions));
 			if (withinTotalRegion) {
 				boolean withinMoveRegion = withinRegion(mouseDownPos, PVector.add(position, buffer),
 						PVector.add(position, dimensions).sub(buffer));
+				cachePos = position.copy();
 				if (withinMoveRegion) { // move
 					p.cursor(PApplet.MOVE); // ARROW, CROSS, HAND, MOVE, TEXT, or WAIT
-					cachePos = position.copy();
 					dragging = true;
-				} else { // resize
+				} else { // resize // L,U,D,R
 					resizing = true;
-					boolean leftSide = withinRegion(mouseDownPos, position,
-							PVector.add(position, new PVector(buffer.x, dimensions.y - buffer.x)));
-					boolean rightSide = withinRegion(mouseDownPos,
-							new PVector(dimensions.x - buffer.x, 0).add(position),
-							new PVector(dimensions.x - buffer.x, dimensions.y - buffer.y).add(position));
-					boolean topSide = withinRegion(mouseDownPos, position,
-							PVector.add(position, new PVector(buffer.x, dimensions.y)));
-					boolean bottomSide = withinRegion(mouseDownPos, position,
-							PVector.add(position, new PVector(buffer.x, dimensions.y)));
-					if (leftSide) {
-						System.out.println("asdasdadadasdleft");
-					}
-					if (rightSide) {
-						System.out.println("rights");
-					}
-					// todo calc side
+					cacheDimensions = dimensions.copy();
+					System.out.println(Arrays.toString(resizeSides));
 				}
 			}
 		}
@@ -363,6 +467,7 @@ public class ScrollMonitor {
 	private void mouseReleased(MouseEvent e) {
 		dragging = false;
 		resizing = false;
+		resizeSides = new boolean[4];
 	}
 
 	/**
@@ -406,8 +511,8 @@ public class ScrollMonitor {
 				|| (point.x <= BR.x && point.x >= UL.x) && (point.y >= BR.y && point.y <= UL.y); // NE
 	}
 
-	private int darkenColor(int c, float percentage) {
-		percentage = PApplet.constrain(percentage, 0, 1);
+	private int darkenColor(int c, float percentage) { // TODO
+		percentage = constrain(percentage, 0, 1);
 		int r = (c >> 16) & 0xff;
 		int g = (c >> 8) & 0xff;
 		int b = c & 0xff;
@@ -526,7 +631,7 @@ public class ScrollMonitor {
 			}
 			drawData /= (smoothing + 1); // divide to get average
 
-			this.drawData[Math.floorMod(pointer - smoothing - 1, length + smoothing)] = PApplet.constrain(drawData, 0,
+			this.drawData[Math.floorMod(pointer - smoothing - 1, length + smoothing)] = constrain(drawData, 0,
 					maxValue - 1) * (dimensions.y / maxValue); // constrain & scale (-1 is stroke Weight)
 
 			pointer++; // inc pointer
@@ -546,7 +651,7 @@ public class ScrollMonitor {
 		 * @param smoothing
 		 */
 		public void setSmoothing(int smoothing) {
-			smoothing = PApplet.constrain(smoothing, 0, length); // floor & ceiling
+			smoothing = constrain(smoothing, 0, length); // floor & ceiling
 			if (this.smoothing != smoothing) { // perform if different | TODO fix with smoothing data
 				float[] tempData = new float[length + smoothing]; // create new buffer
 				System.arraycopy(data, this.smoothing, tempData, smoothing, length); // copy into new buffer
@@ -561,7 +666,7 @@ public class ScrollMonitor {
 			this.maxValue = maxValue;
 			// TODO recalc drawvalues w/ smoothing
 			for (int i = 0; i < drawData.length; i++) {
-				drawData[i] = PApplet.constrain(data[i], 0, maxValue - 1) * (dimensions.y / maxValue);
+				drawData[i] = constrain(data[i], 0, maxValue - 1) * (dimensions.y / maxValue);
 			}
 		}
 
@@ -606,5 +711,17 @@ public class ScrollMonitor {
 			}
 			return -1;
 		}
+	}
+
+	/**
+	 * Make own class, package protected
+	 * TODO pane class (to encapsulate moving / resizing window (give it a pgraphics)? -- scrollmonitor extends... package private
+	 * @author micycle1
+	 *
+	 */
+	private class Pane {
+
+		PGraphics canvas;
+
 	}
 }
