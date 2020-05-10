@@ -1,4 +1,4 @@
-package pathing;
+package micycle.scrollMonitor;
 
 import static processing.core.PApplet.constrain;
 
@@ -301,26 +301,26 @@ public class ScrollMonitor {
 	private void cursorFX() {
 		// L,U,D,R
 		if (resizeSides[0]) { // LEFT SIDE
-			if (resizeSides[1]) { // ↖
+			if (resizeSides[1]) { // â†–
 				pAppletFXscene.setCursor(Cursor.NW_RESIZE);
-			} else if (resizeSides[2]) { // ↙
+			} else if (resizeSides[2]) { // â†™
 				pAppletFXscene.setCursor(Cursor.SW_RESIZE);
-			} else { // ←
+			} else { // â†�
 				pAppletFXscene.setCursor(Cursor.W_RESIZE);
 			}
 		} else if (resizeSides[1]) { // TOP SIDE
-			if (resizeSides[3]) { // ↗
+			if (resizeSides[3]) { // â†—
 				pAppletFXscene.setCursor(Cursor.NE_RESIZE);
-			} else { // ↑
+			} else { // â†‘
 				pAppletFXscene.setCursor(Cursor.N_RESIZE);
 			}
 		} else if (resizeSides[2]) { // BOTTOM SIDE
-			if (resizeSides[3]) { // ↘
+			if (resizeSides[3]) { // â†˜
 				pAppletFXscene.setCursor(Cursor.SE_RESIZE);
-			} else { // ↓
+			} else { // â†“
 				pAppletFXscene.setCursor(Cursor.S_RESIZE);
 			}
-		} else { // →
+		} else { // â†’
 			pAppletFXscene.setCursor(Cursor.E_RESIZE);
 		}
 	}
@@ -332,31 +332,31 @@ public class ScrollMonitor {
 		newDims.set(PApplet.max(newDims.x, minSize.x), PApplet.max(newDims.y, minSize.y));
 		
 		if (resizeSides[0]) { // LEFT SIDE
-			if (resizeSides[1]) { // ↖
+			if (resizeSides[1]) { // â†–
 				position.set(PApplet.min(mousePos.x, posBound.x), PApplet.min(mousePos.y, posBound.y));
 				dimensions.set(newDims.x, newDims.y);
-			} else if (resizeSides[2]) { // ↙
+			} else if (resizeSides[2]) { // â†™
 				position.set(PApplet.min(mousePos.x, posBound.x), PApplet.min(mousePos.y, posBound.y));
 				dimensions.set(newDims.x, newDims.y);
-			} else { // ←
+			} else { // â†�
 				position.set(PApplet.min(mousePos.x, posBound.x), position.y);
 				dimensions.set(newDims.x, dimensions.y);
 			}
 		} else if (resizeSides[1]) { // TOP SIDE
-			if (resizeSides[3]) { // ↗
+			if (resizeSides[3]) { // â†—
 				position.set(position.x, PApplet.min(mousePos.y, posBound.y));
 				dimensions.set(newDims.x, newDims.y);
-			} else { // ↑
+			} else { // â†‘
 				position.set(position.x, PApplet.min(mousePos.y, posBound.y));
 				dimensions.set(dimensions.x, newDims.y);
 			}
 		} else if (resizeSides[2]) { // BOTTOM SIDE
-			if (resizeSides[3]) { // ↘
+			if (resizeSides[3]) { // â†˜
 
-			} else { // ↓
+			} else { // â†“
 
 			}
-		} else { // →
+		} else { // â†’
 
 		}
 		g = p.createGraphics((int) dimensions.x, (int) dimensions.y);
