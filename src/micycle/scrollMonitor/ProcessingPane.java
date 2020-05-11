@@ -11,6 +11,7 @@ import javafx.scene.canvas.Canvas;
 import processing.core.PApplet;
 import processing.core.PGraphics;
 import processing.core.PVector;
+import processing.awt.PSurfaceAWT;
 import processing.event.MouseEvent;
 
 /**
@@ -34,7 +35,7 @@ abstract class ProcessingPane {
 	private boolean dragging = false, resizing = false; // private, exposed via method callbacks
 
 	private enum RENDERERS {
-		JAVA2D, JAVAFX, P2D
+		JAVA2D, JAVAFX, JOGL
 	} // todo find renderer, then use to set horizontal/vert cursor
 
 	private final RENDERERS renderer;
@@ -42,6 +43,7 @@ abstract class ProcessingPane {
 	private final PVector minimumDimensions;
 
 	private Scene pAppletFXscene = null;
+	private java.awt.Canvas canvasAWT = null;
 
 	/**
 	 * Both used during resizing/moving the graph.
@@ -86,9 +88,10 @@ abstract class ProcessingPane {
 				break;
 			case "processing.awt.PGraphicsJava2D" :
 				renderer = RENDERERS.JAVA2D;
+				canvasAWT = (java.awt.Canvas) ((PSurfaceAWT) p.getSurface()).getNative();
 				break;
 			default :
-				renderer = RENDERERS.JAVA2D; // or null?
+				renderer = RENDERERS.JOGL;
 				break;
 		}
 
@@ -128,7 +131,16 @@ abstract class ProcessingPane {
 			} else {
 				if (!lockDimensions) {
 					calcSidesMouseOver();
-					setFX2DCursor();
+					switch (renderer) {
+						case JAVA2D :
+							setAWTCursor();
+							break;
+						case JAVAFX :
+							setFX2DCursor();
+						case JOGL : // don't set cursor
+						default :
+							break;
+					}
 				}
 			}
 		} else {
@@ -202,7 +214,7 @@ abstract class ProcessingPane {
 	}
 
 	/**
-	 * Set edge cursor in JavaFX mode
+	 * Sets correct edge cursor when parent PApplet is in FX2D rendering mode.
 	 */
 	private void setFX2DCursor() {
 		// L,U,D,R
@@ -228,6 +240,36 @@ abstract class ProcessingPane {
 			}
 		} else { // â†’
 			pAppletFXscene.setCursor(Cursor.E_RESIZE);
+		}
+	}
+
+	/**
+	 * Sets correct edge cursor when parent PApplet is in JAVA2D (default) rendering
+	 * mode.
+	 */
+	private void setAWTCursor() {
+		if (resizeSides[0]) { // LEFT SIDE
+			if (resizeSides[1]) { // NW
+				canvasAWT.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.NW_RESIZE_CURSOR));
+			} else if (resizeSides[2]) { // â†™
+				canvasAWT.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.SW_RESIZE_CURSOR));
+			} else { // â†�
+				canvasAWT.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.W_RESIZE_CURSOR));
+			}
+		} else if (resizeSides[1]) { // TOP SIDE
+			if (resizeSides[3]) { // â†—
+				canvasAWT.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.NE_RESIZE_CURSOR));
+			} else { // â†‘
+				canvasAWT.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.N_RESIZE_CURSOR));
+			}
+		} else if (resizeSides[2]) { // BOTTOM SIDE
+			if (resizeSides[3]) { // â†˜
+				canvasAWT.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.SE_RESIZE_CURSOR));
+			} else { // â†“
+				canvasAWT.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.S_RESIZE_CURSOR));
+			}
+		} else { // â†’
+			canvasAWT.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.E_RESIZE_CURSOR));
 		}
 	}
 
