@@ -77,6 +77,7 @@ abstract class ProcessingPane {
 		this.position = position;
 		this.dimensions = dimensions;
 		canvas = p.createGraphics((int) dimensions.x, (int) dimensions.y);
+		canvas.smooth(4);
 
 		mouseResizeBuffer = new PVector(20, 20);
 		minimumDimensions = new PVector(150, 100);
@@ -99,7 +100,7 @@ abstract class ProcessingPane {
 	}
 
 	public final void run() {
-		update();
+		update(); // resizing & dragging, etc.
 		canvas.beginDraw();
 		draw();
 		canvas.endDraw();

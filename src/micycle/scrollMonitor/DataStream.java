@@ -71,6 +71,7 @@ final class DataStream implements Comparable<DataStream> {
 	int direction = 1; // 1 scroll to left; -1 scroll to right
 	int pushedCount = 0;
 	PVector drawDimensions;
+	final String dataUnit;
 
 	/**
 	 * todo auto push negative so it always scrolls? Scrolls to accomdate new data
@@ -97,6 +98,7 @@ final class DataStream implements Comparable<DataStream> {
 		fill = true;
 		outline = true;
 		this.drawDimensions = drawDimensions;
+		dataUnit = " " + "MB/s"; // TODO
 	}
 
 	/**
@@ -197,9 +199,8 @@ final class DataStream implements Comparable<DataStream> {
 	 * @return
 	 */
 	float getRawData(int index) { // TODO
-		int i = Math.floorMod((pointer + index - 1) - (length), length + smoothing); // -1, because pointer is
-																						// incremented after push
-		return data[index];
+		int i = Math.floorMod(pointer - 1 + index - length, length + smoothing);
+		return data[i];
 	}
 
 	void setDrawDimensions(PVector drawDimensions) {
@@ -207,7 +208,8 @@ final class DataStream implements Comparable<DataStream> {
 	}
 
 	/**
-	 * Used to determine iteration order
+	 * Used to determine iteration order TODO use value of last datapoint to
+	 * determine order?
 	 */
 	@Override
 	public int compareTo(DataStream d) {
