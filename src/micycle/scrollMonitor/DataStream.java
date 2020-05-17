@@ -7,12 +7,14 @@ import java.util.Arrays;
 import processing.core.PVector;
 
 /**
- * Encapsulates Container for data, index, queue position, etc. Supports
+ * Encapsulates Container for data, index, queue position, draw-data etc. Supports
  * smoothing in the form of a moving average. To this end, the length of the
  * data array must be of size= size+smoothingSize so the first data item we want
  * to see can be smoothed, rather than skipping the first smoothingSize items.
  * TODO dynamic ordering / opacity based on mouse-over/highest value TODO max
  * datapoint/history size (purged thereafter) & viewable datapoints,
+ * 
+ * does not draw the data itself, this is left to scrollmonitor
  * 
  * @author micycle1
  *
@@ -69,9 +71,12 @@ final class DataStream implements Comparable<DataStream> {
 	 */
 	final int length;
 	int direction = 1; // 1 scroll to left; -1 scroll to right
-	int pushedCount = 0;
-	PVector drawDimensions;
-	final String dataUnit;
+	PVector drawDimensions; // used to scale raw data for draw data
+	final String dataUnit; // optional data label for axis values
+
+	private float drawDataCache[]; // returns this when paused
+	private int pointerCache;
+	private boolean paused = false;
 
 	/**
 	 * todo auto push negative so it always scrolls? Scrolls to accomdate new data
@@ -85,16 +90,17 @@ final class DataStream implements Comparable<DataStream> {
 		active = true;
 		smoothing = 0;
 		pointer = 0;
+		
 		data = new float[length + smoothing];
 		Arrays.fill(data, -1); // init to -1 so not drawn by stroke
-		System.out.println(data[19]);
-		data[0] = Float.MAX_VALUE;
+		
+		data[0] = Float.MAX_VALUE; // mark for inital smoothing history generation 
 		fillColour = -1232323; // p.color(50, 50, 130, 150); // TODO
 		stroke = -12389127; // p.color(255, 80, 180, 100);
+		
 		drawData = new float[length];
 		Arrays.fill(drawData, -1); // init to -1 so not drawn by stroke
-		System.out.println(drawData[123]);
-		// TODO Auto-generated constructor stub
+		
 		fill = true;
 		outline = true;
 		this.drawDimensions = drawDimensions;
@@ -136,9 +142,6 @@ final class DataStream implements Comparable<DataStream> {
 		// pointer = ((pointer % length) + smoothing) % (length + smoothing); // recalc
 		// pointer (offset to active part of data array)
 		pointer %= (length + smoothing);
-
-		// smoothing - pointer
-		pushedCount++;
 	}
 
 	void pushEmpty() {
@@ -166,7 +169,7 @@ final class DataStream implements Comparable<DataStream> {
 		this.maxValue = maxValue;
 		// TODO recalc drawvalues w/ smoothing
 		for (int i = 0; i < drawData.length; i++) {
-			drawData[i] = constrain(data[i], 0, maxValue - 1) * (drawDimensions.y / maxValue);
+			drawData[i] = constrain(data[i], -1, maxValue - 1) * (drawDimensions.y / maxValue); // -1 because of stroke
 		}
 	}
 
@@ -178,6 +181,10 @@ final class DataStream implements Comparable<DataStream> {
 		this.active = active;
 	}
 
+	void setUnit(String unit) {
+
+	}
+
 	/**
 	 * Get draw data that is logically at the index given (where 0 is left most
 	 * datapoint) or, ordered by recency, where 0 is oldest data point
@@ -186,9 +193,16 @@ final class DataStream implements Comparable<DataStream> {
 	 * @return
 	 */
 	float getDrawData(int index) {
-		int i = Math.floorMod(pointer + index - 1, length + smoothing); // -1, because pointer is incremented after
-																		// push
-		return drawData[i];
+		if (paused) {
+			int i = Math.floorMod(pointerCache + index - 1, length + smoothing); // -1, because pointer is incremented
+																					// after
+			// push
+			return drawDataCache[i];
+		} else {
+			int i = Math.floorMod(pointer + index - 1, length + smoothing); // -1, because pointer is incremented after
+			// push
+			return drawData[i];
+		}
 	}
 
 	/**
@@ -205,6 +219,16 @@ final class DataStream implements Comparable<DataStream> {
 
 	void setDrawDimensions(PVector drawDimensions) {
 		this.drawDimensions = drawDimensions;
+	}
+
+	void pause() {
+		paused = true;
+		pointerCache = pointer;
+		drawDataCache = drawData.clone();
+	}
+
+	void resume() {
+		paused = false;
 	}
 
 	/**

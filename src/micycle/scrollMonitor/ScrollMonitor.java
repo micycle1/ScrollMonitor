@@ -2,13 +2,14 @@ package micycle.scrollMonitor;
 
 import static processing.core.PApplet.constrain;
 import static processing.core.PApplet.max;
+import static processing.core.PApplet.round;
 
 import java.util.HashMap;
 
 import processing.core.PApplet;
-import processing.core.PImage;
 import processing.core.PShape;
 import processing.core.PVector;
+import processing.event.KeyEvent;
 
 /**
  * Add, push then draw Each graph can contain multiple datastreams. TODO change
@@ -25,6 +26,13 @@ public class ScrollMonitor extends ProcessingPane {
 
 	private final HashMap<String, DataStream> streams;
 	// private SortedMap<DataStream, Integer> todo; // TODO, ordered iteration
+
+	private boolean pause = false;
+	private int pauseFrameCount = 0; // used to pause bg scrolling
+
+	int strokeWeight = 5; // TODO
+	int borderWeight = 2; // TODO
+	int maxValue = 200; // TODO remove datastream
 
 	public ScrollMonitor(PApplet p, PVector position, PVector dimensions) {
 		super(p, position, dimensions);
@@ -84,15 +92,14 @@ public class ScrollMonitor extends ProcessingPane {
 	 */
 	public void draw() {
 
-		canvas.strokeCap(PApplet.ROUND);
+		unlockPosition();
+
 		canvas.clear();
 
 		drawBG(streams.values().iterator().next()); // TODO
-		int strokeWeight = 5;
-		canvas.strokeWeight(strokeWeight);
+
 		int dataStreamIndex = 0;
 		for (DataStream d : streams.values()) { // TODO draw back to front
-			canvas.stroke(d.stroke);
 			PShape graph = p.createShape();
 			graph.setStrokeWeight(strokeWeight);
 			if (d.fill) {
@@ -102,6 +109,7 @@ public class ScrollMonitor extends ProcessingPane {
 			}
 
 			graph.beginShape(); // BEGIN GRAPH PSHAPE
+			graph.fill(d.fillColour);
 			if (!d.outline) {
 				graph.noStroke(); // need to call inside beginShape()
 			} else {
@@ -124,42 +132,54 @@ public class ScrollMonitor extends ProcessingPane {
 			graph.vertex(-strokeWeight, dimensions.y + strokeWeight); // lower left corner
 
 			boolean mouseOverStream = false;
-			if (withinMoveRegion && pointInPoly(graph, PVector.sub(mousePos, position))) { // mouseOver test
+			if (withinMoveRegion && !dragging && pointInPoly(graph, PVector.sub(mousePos, position))) { // mouseOver
+																										// test
 				mouseOverStream = true;
+				lockPosition();
 				graph.fill(0xff000000 | ~d.fillColour, canvas.alpha(d.fillColour)); // invert rgb, keep alpha TODO @150
 			}
 
 			graph.endShape(PApplet.CLOSE); // END GRAPH PSHAPE
 			canvas.shape(graph);
 
-			canvas.fill(0);
-			p.fill(d.fillColour);
-			p.textAlign(PApplet.LEFT, PApplet.CENTER);
-			canvas.text(d.getDrawData(d.length - 1), 10 + (55 * dataStreamIndex), 30);
-			canvas.text(d.getRawData(d.length), 10 + (55 * dataStreamIndex), 50); // TODO
-
-			p.text(PApplet.round(d.getRawData(d.length)) + d.dataUnit, position.x + dimensions.x + 10,
-					position.y + (dimensions.y - d.getDrawData(d.length - 1)));
+//			canvas.fill(0);
+//			p.fill(d.fillColour);
+//			p.textAlign(PApplet.LEFT, PApplet.CENTER);
+//			canvas.text(d.getDrawData(d.length - 1), 10 + (55 * dataStreamIndex), 30);
+//			canvas.text(d.getRawData(d.length), 10 + (55 * dataStreamIndex), 50); // TODO
 
 			if (mouseOverStream) {
 				p.cursor(PApplet.CROSS);
 				float x = constrain(mousePos.x, position.x + strokeWeight - 1,
 						position.x + dimensions.x - strokeWeight + 1) - position.x; // constrain mouseOverX
 				float valAtMouse = d.getDrawData((int) (x / (dimensions.x / (d.length - 1))));
-				canvas.stroke(d.fillColour);
+				canvas.stroke(d.stroke);
 				canvas.strokeWeight(max(1, strokeWeight - 0));
-				canvas.line(x, dimensions.y, x, dimensions.y - valAtMouse + (strokeWeight - 1)); // line where mouse is
-				
+				canvas.line(x, dimensions.y, x, dimensions.y - valAtMouse + 1); // line where mouse is
+
 				canvas.textAlign(PApplet.CENTER, PApplet.CENTER);
-				canvas.fill(0, 255, 0);
+				canvas.fill(d.stroke);
 				canvas.text(valAtMouse, x, PApplet.max(dimensions.y - valAtMouse - 25, 0));
 
 				p.textAlign(PApplet.CENTER, PApplet.TOP);
 				p.fill(0, 255, 0);
-				p.text(PApplet.round(valAtMouse), x + position.x, position.y + dimensions.y + 10);
+				p.text(round(valAtMouse) + d.dataUnit, x + position.x, position.y + dimensions.y + 10);
 			}
+
+			p.textAlign(PApplet.LEFT, PApplet.CENTER);
+			p.text(round(d.getRawData(d.length)) + d.dataUnit, position.x + dimensions.x + 10,
+					position.y + (dimensions.y - d.getDrawData(d.length - 1)));
+
 			dataStreamIndex++;
 		}
+	}
+
+	@Override
+	public void post() {
+		p.noFill();
+		p.strokeWeight(borderWeight * 2);
+		p.rect(position.x - borderWeight, position.y - borderWeight, dimensions.x + 2 * borderWeight - 1,
+				dimensions.y + 2 * borderWeight - 1);
 	}
 
 	@Override
@@ -176,28 +196,97 @@ public class ScrollMonitor extends ProcessingPane {
 	}
 
 	/**
+	 * Pause the view (data pushing is not blocked). [all]
+	 * 
+	 * @see #unPause()
+	 */
+	public void pause() {
+		if (!pause) {
+			pause = true;
+			pauseFrameCount = p.frameCount;
+			for (DataStream d : streams.values()) {
+				d.pause();
+			}
+		}
+	}
+
+	/**
+	 * Pause a given dataStream from scrolling, display the data at pausing until
+	 * resumed. It will still recieve data pushed in, but will not display until it
+	 * is resumed.
+	 */
+	public void pause(String dataStream) {
+		streams.get(dataStream).pause();
+	}
+
+	/**
+	 * Pause the view (data pushing is not blocked).
+	 */
+	public void unPause() {
+		pause = false;
+		for (DataStream d : streams.values()) {
+			d.resume();
+		}
+	}
+
+	/**
+	 * Pause the view (data pushing is not blocked).
+	 */
+	public void unPause(String dataStream) {
+		streams.get(dataStream).resume();
+	}
+
+	/**
+	 * Pause the view (data pushing is not blocked).
+	 */
+	public void togglePause() {
+		// TODO
+	}
+
+	@Override
+	void keyReleased(KeyEvent e) {
+		switch (e.getKeyCode()) {
+			case 9 : // TAB
+				if (pause) {
+					unPause();
+				} else {
+					pause();
+				}
+				break;
+			default :
+				break;
+		}
+	}
+
+	/**
 	 * Draws graph background (fill and line segments)
 	 * 
 	 * @param d
 	 */
 	private void drawBG(DataStream d) {
 		canvas.fill(50, 125, 250, 150); // bg
+//		canvas.noFill();
 		canvas.noStroke();
 		// canvas.stroke(255, 255, 0); // TODO
 		canvas.rect(0, 0, dimensions.x, dimensions.y); // bg
 
 		canvas.stroke(0, 150); // guidelines
 		canvas.strokeWeight(1); // guidelines
-		float hSegments = 2;
-		for (int i = 1; i < hSegments; i++) { // horizontal segments
-			canvas.line(0, dimensions.y - i * (dimensions.y / (hSegments + 0)), dimensions.x,
-					dimensions.y - i * (dimensions.y / (hSegments + 0)));
+		float hSegments = 4;
+		for (int i = 0; i < hSegments + 1; i++) { // horizontal segments
+			float y = dimensions.y - i * (dimensions.y / (hSegments + 0));
+			canvas.line(0, y, dimensions.x, y);
+			p.fill(0);
+			p.textAlign(PApplet.RIGHT, PApplet.CENTER);
+			p.text(round(maxValue / hSegments * i), position.x - 10, position.y + y);
 		} // calc valuse based on stream max value Y
 
-		float vSegments = 2;
-		for (int i = 0; i < vSegments; i++) { // horizontal segments
+		float vSegments = 4;
+		for (int i = 0; i < vSegments; i++) { // vertical segments
+
 			float xPos = Math.floorMod(
-					(int) ((i * (dimensions.x / vSegments) - (d.pushedCount * dimensions.x / d.length))),
+					(int) ((i * (dimensions.x / vSegments)
+							- ((pause ? pauseFrameCount : p.frameCount) * dimensions.x / d.length))),
 					(int) dimensions.x);
 			canvas.line(xPos, 0, xPos, dimensions.y);
 
@@ -211,7 +300,7 @@ public class ScrollMonitor extends ProcessingPane {
 	 * @param point PVector point to check
 	 * @return boolean
 	 */
-	private static boolean pointInPoly(PShape s, PVector point) {
+	private static final boolean pointInPoly(PShape s, PVector point) {
 
 		boolean c = false;
 		int j = s.getVertexCount() - 1;

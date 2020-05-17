@@ -11,7 +11,9 @@ import javafx.scene.canvas.Canvas;
 import processing.core.PApplet;
 import processing.core.PGraphics;
 import processing.core.PVector;
+
 import processing.awt.PSurfaceAWT;
+import processing.event.KeyEvent;
 import processing.event.MouseEvent;
 
 /**
@@ -23,8 +25,8 @@ import processing.event.MouseEvent;
  */
 abstract class ProcessingPane {
 
-	PApplet p;
-	PGraphics canvas;
+	PApplet p; // Parent PApplet (exposed for sub-class)
+	PGraphics canvas; // Pane graphics (sub-class should draw into this) 
 	PVector position, dimensions;
 	PVector mousePos, mouseDownPos;
 
@@ -32,15 +34,18 @@ abstract class ProcessingPane {
 	 * Tracks from which side(s) the monitor is being resized.
 	 */
 	private boolean[] resizeSides = new boolean[4]; // L,U,D,R
-	private boolean dragging = false, resizing = false; // private, exposed via method callbacks
+	boolean dragging = false, resizing = false; // Also exposed in method callbacks
 
+	/**
+	 * Rendering mode of parent PApplet (used when changing mouse cursor)
+	 */
 	private enum RENDERERS {
 		JAVA2D, JAVAFX, JOGL
-	} // todo find renderer, then use to set horizontal/vert cursor
+	}
 
 	private final RENDERERS renderer;
 
-	private final PVector minimumDimensions;
+	private final PVector minimumDimensions; // Minimum pane resize dimensions
 
 	private Scene pAppletFXscene = null;
 	private java.awt.Canvas canvasAWT = null;
@@ -67,7 +72,7 @@ abstract class ProcessingPane {
 	boolean withinMoveRegion = false;
 
 	/**
-	 * Allow/prevent end-user from moving/resizing monitor.
+	 * Allow/prevent end-user from moving/resizing pane.
 	 */
 	private boolean lockPosition = false, lockDimensions = false;
 
@@ -97,6 +102,7 @@ abstract class ProcessingPane {
 		}
 
 		p.registerMethod("mouseEvent", this);
+		p.registerMethod("keyEvent", this);
 	}
 
 	public final void run() {
@@ -105,6 +111,7 @@ abstract class ProcessingPane {
 		draw();
 		canvas.endDraw();
 		p.image(canvas, position.x, position.y);
+		post();
 	}
 
 	private final void update() { // pre#
@@ -116,14 +123,14 @@ abstract class ProcessingPane {
 
 		if (resizing) {
 			resizeInternal();
-			resize();
-			return;
+			resize(); // call user code
+			return; // return early
 		}
 
 		if (dragging) {
-			position.set(PVector.sub(mousePos, mouseDownPos).add(cachePos)); // dragging
-			move();
-			return;
+			position.set(PVector.sub(mousePos, mouseDownPos).add(cachePos)); // set pos to PApplet mousePos
+			move(); // call user code
+			return; // return early
 		}
 
 		if (mouseOverPane) {
@@ -138,8 +145,9 @@ abstract class ProcessingPane {
 							break;
 						case JAVAFX :
 							setFX2DCursor();
-						case JOGL : // don't set cursor
+						case JOGL : // set cursor to default
 						default :
+							p.cursor(PApplet.ARROW);
 							break;
 					}
 				}
@@ -150,6 +158,12 @@ abstract class ProcessingPane {
 	}
 
 	public abstract void draw();
+
+	/**
+	 * Draw stuff after canvas has been written to PApplet.
+	 */
+	public void post() {
+	};
 
 	private final void resizeInternal() {
 		PVector posBound = PVector.add(cachePos, cacheDimensions).sub(minimumDimensions); // stops moving the monitor
@@ -199,6 +213,22 @@ abstract class ProcessingPane {
 	 * Called when pane is being moved
 	 */
 	abstract void move();
+
+	final void lockPosition() {
+		lockPosition = true;
+	}
+
+	final void unlockPosition() {
+		lockPosition = false;
+	}
+	
+	final void lockDimensions() {
+		lockDimensions = true;
+	}
+	
+	final void unlockDimensions() {
+		lockDimensions = false;
+	}
 
 	private void calcSidesMouseOver() {
 		resizeSides[0] = resizeSides[0] = withinRegion(mousePos, position,
@@ -378,6 +408,38 @@ abstract class ProcessingPane {
 	 * <b>dragged</b>.
 	 */
 	void mouseDragged(MouseEvent e) {
+	}
+	
+	/**
+	 * This method is <b>Public</b> only to enable binding to a parent PApplet.
+	 * <p>You can <b>ignore this method</b> since the parent sketch will call it automatically
+	 * when it detects a key event (provided register() has been called).
+	 */
+	public void keyEvent(KeyEvent e) {
+		switch (e.getAction()) {
+			case processing.event.KeyEvent.PRESS :
+				keyPressed(e);
+				break;
+			case processing.event.KeyEvent.RELEASE :
+				keyReleased(e);
+				break;
+			default :
+				break;
+		}
+	}
+
+	/**
+	 * Called automatically when the parent PApplet issues a <b>PRESS</b> {@link processing.event.KeyEvent KeyEvent}.
+	 * <p>Therefore write any code here that should be executed when a key is <b>pressed</b>.
+	 */
+	void keyPressed(KeyEvent e) {
+	}
+
+	/**
+	 * Called automatically when the parent PApplet issues a <b>RELEASE</b> {@link processing.event.KeyEvent KeyEvent}.
+	 * <p>Therefore write any code here that should be executed when a key is <b>released</b>.
+	 */
+	void keyReleased(KeyEvent e) {
 	}
 
 	/**
