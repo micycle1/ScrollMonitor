@@ -26,7 +26,7 @@ import processing.event.MouseEvent;
 abstract class ProcessingPane {
 
 	PApplet p; // Parent PApplet (exposed for sub-class)
-	PGraphics canvas; // Pane graphics (sub-class should draw into this) 
+	PGraphics canvas; // Pane graphics (sub-class should draw into this)
 	PVector position, dimensions;
 	PVector mousePos, mouseDownPos;
 
@@ -145,6 +145,7 @@ abstract class ProcessingPane {
 							break;
 						case JAVAFX :
 							setFX2DCursor();
+							break;
 						case JOGL : // set cursor to default
 						default :
 							p.cursor(PApplet.ARROW);
@@ -165,40 +166,42 @@ abstract class ProcessingPane {
 	public void post() {
 	};
 
+
 	private final void resizeInternal() {
 		PVector posBound = PVector.add(cachePos, cacheDimensions).sub(minimumDimensions); // stops moving the monitor
 																							// when
 		// resizing past prior edge
 		PVector newDims = PVector.add(cacheDimensions, cachePos).sub(mousePos);
+		PVector newDims2 = PVector.sub(mousePos, cachePos);
 		newDims.set(max(newDims.x, minimumDimensions.x), max(newDims.y, minimumDimensions.y));
 
 		if (resizeSides[0]) { // LEFT SIDE
-			if (resizeSides[1]) { // â†–
+			if (resizeSides[1]) { // ↖
 				position.set(min(mousePos.x, posBound.x), min(mousePos.y, posBound.y));
 				dimensions.set(newDims.x, newDims.y);
-			} else if (resizeSides[2]) { // â†™
-				position.set(min(mousePos.x, posBound.x), min(mousePos.y, posBound.y));
-				dimensions.set(newDims.x, newDims.y);
-			} else { // â†�
+			} else if (resizeSides[2]) { // ↙
+				position.set(min(mousePos.x, posBound.x), position.y);
+				dimensions.set(cacheDimensions.x - newDims2.x, max(newDims2.y, minimumDimensions.y));
+			} else { // ←
 				position.set(min(mousePos.x, posBound.x), position.y);
 				dimensions.set(newDims.x, dimensions.y);
 			}
 		} else if (resizeSides[1]) { // TOP SIDE
-			if (resizeSides[3]) { // â†—
+			if (resizeSides[3]) { // ↗
 				position.set(position.x, min(mousePos.y, posBound.y));
-				dimensions.set(newDims.x, newDims.y);
-			} else { // â†‘
+				dimensions.set(max(newDims2.x, minimumDimensions.x), newDims.y);
+			} else { // ↑
 				position.set(position.x, min(mousePos.y, posBound.y));
 				dimensions.set(dimensions.x, newDims.y);
 			}
 		} else if (resizeSides[2]) { // BOTTOM SIDE
-			if (resizeSides[3]) { // â†˜
-
-			} else { // â†“
-
+			if (resizeSides[3]) { // ↘
+				dimensions.set(max(newDims2.x, minimumDimensions.x), max(newDims2.y, minimumDimensions.y));
+			} else { // ↓
+				dimensions.set(dimensions.x, max(newDims2.y, minimumDimensions.y));
 			}
-		} else { // â†’ east
-
+		} else { // → 
+			dimensions.set(max(newDims2.x, minimumDimensions.x), dimensions.y);
 		}
 		canvas = p.createGraphics((int) dimensions.x, (int) dimensions.y);
 		resize();
@@ -221,27 +224,24 @@ abstract class ProcessingPane {
 	final void unlockPosition() {
 		lockPosition = false;
 	}
-	
+
 	final void lockDimensions() {
 		lockDimensions = true;
 	}
-	
+
 	final void unlockDimensions() {
 		lockDimensions = false;
 	}
 
 	private void calcSidesMouseOver() {
-		resizeSides[0] = resizeSides[0] = withinRegion(mousePos, position,
-				PVector.add(position, new PVector(mouseResizeBuffer.x, dimensions.y - mouseResizeBuffer.x))); // left
-																												// side
+		resizeSides[0] = withinRegion(mousePos, position,
+				PVector.add(position, new PVector(mouseResizeBuffer.x, dimensions.y))); // L
 		resizeSides[1] = withinRegion(mousePos, position,
-				PVector.add(position, new PVector(dimensions.x + mouseResizeBuffer.x, mouseResizeBuffer.y))); // top
-																												// side
-		resizeSides[2] = withinRegion(mousePos, new PVector(0, dimensions.y).add(position),
-				new PVector(dimensions.x, dimensions.y).add(position).sub(mouseResizeBuffer)); // bottom side
+				PVector.add(position, new PVector(dimensions.x + mouseResizeBuffer.x, mouseResizeBuffer.y))); // U
+		resizeSides[2] = withinRegion(mousePos, new PVector(0, dimensions.y - mouseResizeBuffer.y).add(position),
+				new PVector(dimensions.x, dimensions.y).add(position)); // D
 		resizeSides[3] = withinRegion(mousePos, new PVector(dimensions.x, 0).add(position),
-				new PVector(dimensions.x - mouseResizeBuffer.x, dimensions.y - mouseResizeBuffer.y).add(position)); // right
-																													// side
+				new PVector(dimensions.x - mouseResizeBuffer.x, dimensions.y).add(position)); // R
 	}
 
 	/**
@@ -264,12 +264,12 @@ abstract class ProcessingPane {
 				pAppletFXscene.setCursor(Cursor.N_RESIZE);
 			}
 		} else if (resizeSides[2]) { // BOTTOM SIDE
-			if (resizeSides[3]) { // â†˜
+			if (resizeSides[3]) { // ↘
 				pAppletFXscene.setCursor(Cursor.SE_RESIZE);
-			} else { // â†“
+			} else { // ↓
 				pAppletFXscene.setCursor(Cursor.S_RESIZE);
 			}
-		} else { // â†’
+		} else if (resizeSides[3]) { // ←
 			pAppletFXscene.setCursor(Cursor.E_RESIZE);
 		}
 	}
@@ -299,7 +299,7 @@ abstract class ProcessingPane {
 			} else { // â†“
 				canvasAWT.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.S_RESIZE_CURSOR));
 			}
-		} else { // â†’
+		} else if (resizeSides[3]) { // ←
 			canvasAWT.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.E_RESIZE_CURSOR));
 		}
 	}
@@ -409,11 +409,13 @@ abstract class ProcessingPane {
 	 */
 	void mouseDragged(MouseEvent e) {
 	}
-	
+
 	/**
 	 * This method is <b>Public</b> only to enable binding to a parent PApplet.
-	 * <p>You can <b>ignore this method</b> since the parent sketch will call it automatically
-	 * when it detects a key event (provided register() has been called).
+	 * <p>
+	 * You can <b>ignore this method</b> since the parent sketch will call it
+	 * automatically when it detects a key event (provided register() has been
+	 * called).
 	 */
 	public void keyEvent(KeyEvent e) {
 		switch (e.getAction()) {
@@ -429,15 +431,21 @@ abstract class ProcessingPane {
 	}
 
 	/**
-	 * Called automatically when the parent PApplet issues a <b>PRESS</b> {@link processing.event.KeyEvent KeyEvent}.
-	 * <p>Therefore write any code here that should be executed when a key is <b>pressed</b>.
+	 * Called automatically when the parent PApplet issues a <b>PRESS</b>
+	 * {@link processing.event.KeyEvent KeyEvent}.
+	 * <p>
+	 * Therefore write any code here that should be executed when a key is
+	 * <b>pressed</b>.
 	 */
 	void keyPressed(KeyEvent e) {
 	}
 
 	/**
-	 * Called automatically when the parent PApplet issues a <b>RELEASE</b> {@link processing.event.KeyEvent KeyEvent}.
-	 * <p>Therefore write any code here that should be executed when a key is <b>released</b>.
+	 * Called automatically when the parent PApplet issues a <b>RELEASE</b>
+	 * {@link processing.event.KeyEvent KeyEvent}.
+	 * <p>
+	 * Therefore write any code here that should be executed when a key is
+	 * <b>released</b>.
 	 */
 	void keyReleased(KeyEvent e) {
 	}
