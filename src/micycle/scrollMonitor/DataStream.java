@@ -74,9 +74,10 @@ final class DataStream implements Comparable<DataStream> {
 	PVector drawDimensions; // used to scale raw data for draw data
 	final String dataUnit; // optional data label for axis values
 
-	private float drawDataCache[]; // returns this when paused
+	float drawDataCache[]; // returns this when paused
 	private int pointerCache;
-	private boolean paused = false;
+	boolean paused = false;
+	private float pauseValue;
 
 	/**
 	 * todo auto push negative so it always scrolls? Scrolls to accomdate new data
@@ -94,7 +95,7 @@ final class DataStream implements Comparable<DataStream> {
 		data = new float[length + smoothing];
 		Arrays.fill(data, -1); // init to -1 so not drawn by stroke
 		
-		data[0] = Float.MAX_VALUE; // mark for inital smoothing history generation 
+		data[0] = -1.9876f; // mark for inital smoothing history generation 
 		fillColour = -1232323; // p.color(50, 50, 130, 150); // TODO
 		stroke = -12389127; // p.color(255, 80, 180, 100);
 		
@@ -114,12 +115,11 @@ final class DataStream implements Comparable<DataStream> {
 	 */
 	void push(float datum) {
 
-		if (pointer == 0 && this.data[0] == Float.MAX_VALUE) { // on first data point, generate moving average
+		if (pointer == 0 && this.data[0] == -1.9876f) { // on first data point, generate moving average
 																// data,
 																// append to end of array because pointer starts at
 																// 0, so will look
 																// backwards for history
-			System.out.println("fill");
 			for (int i = 0; i < smoothing; i++) {
 				this.data[length + smoothing - i] = datum;
 			}
@@ -184,6 +184,13 @@ final class DataStream implements Comparable<DataStream> {
 	void setUnit(String unit) {
 
 	}
+	
+	/**
+	 * Last value when paused
+	 */
+	protected float getPauseValue() {
+		return pauseValue;
+	}
 
 	/**
 	 * Get draw data that is logically at the index given (where 0 is left most
@@ -223,6 +230,7 @@ final class DataStream implements Comparable<DataStream> {
 
 	void pause() {
 		paused = true;
+		pauseValue = getRawData(length);
 		pointerCache = pointer;
 		drawDataCache = drawData.clone();
 	}

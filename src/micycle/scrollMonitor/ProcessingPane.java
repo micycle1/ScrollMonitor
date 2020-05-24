@@ -200,7 +200,7 @@ abstract class ProcessingPane {
 			} else { // ↓
 				dimensions.set(dimensions.x, max(newDims2.y, minimumDimensions.y));
 			}
-		} else { // → 
+		} else if (resizeSides[3]) { // → 
 			dimensions.set(max(newDims2.x, minimumDimensions.x), dimensions.y);
 		}
 		canvas = p.createGraphics((int) dimensions.x, (int) dimensions.y);
