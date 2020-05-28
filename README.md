@@ -1,5 +1,5 @@
 # ScrollMonitor
-A pretty GUI element for Processing to plot realtime data on a sketch.
+A pretty GUI element for Processing to plot realtime data on a sketch. A sole scroll monitor is capable of plotting multiple datastreams at once.
 A scrolling line graph built with Processing, for Processing.
 
 A single scroll monitor supports multiple data streams (line plots).
