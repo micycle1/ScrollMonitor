@@ -78,6 +78,7 @@ final class DataStream implements Comparable<DataStream> {
 	private int pointerCache;
 	boolean paused = false;
 	private float pauseValue;
+	boolean draw = true; // draw/render this datastream?
 
 	/**
 	 * todo auto push negative so it always scrolls? Scrolls to accomdate new data

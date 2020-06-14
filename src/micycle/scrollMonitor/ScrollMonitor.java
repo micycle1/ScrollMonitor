@@ -5,6 +5,9 @@ import static processing.core.PApplet.max;
 import static processing.core.PApplet.round;
 
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedList;
 
 import processing.core.PApplet;
 import processing.core.PShape;
@@ -13,27 +16,32 @@ import processing.event.KeyEvent;
 
 /**
  * TODO: datastream defines how many datapoints are visible from each stream
- * (global) or per-stream?
+ * (global) or per-stream?{@link #addDataStream(String, int)}
+ * 
+ * TODO thread drawing, begin drawing when push called, then draw to papplet in
+ * post().
  * 
  * @author micycle1
  *
  */
 public class ScrollMonitor extends ProcessingPane {
 
-	private final HashMap<String, DataStream> streams;
-	// private SortedMap<DataStream, Integer> todo; // TODO, ordered iteration
+	private final LinkedHashMap<String, DataStream> streams; // most recent last (add order)
+	private LinkedList<DataStream> drawOrder; // most recent first (draw back to front)
 
 	private boolean pause = false;
 	private int pauseFrameCount = 0; // used to pause BG scrolling
 
 	private int graphStrokeWeight = 5; // TODO
 	private int monitorBorderWeight = 2; // TODO
-	
+
 	int yAxisMax = 200; // TODO remove from datastream
+	int dataPoints = 300; // or x axis TODO remove from datastream
 
 	public ScrollMonitor(PApplet p, PVector position, PVector dimensions) {
 		super(p, position, dimensions);
-		streams = new HashMap<>();
+		streams = new LinkedHashMap<>();
+		drawOrder = new LinkedList<>();
 	}
 
 	/**
@@ -44,7 +52,20 @@ public class ScrollMonitor extends ProcessingPane {
 	public void addDataStream(String name, int historyCap) {
 		if (!streams.containsKey(name)) { // enfore unique name
 			streams.put(name, new DataStream(name, historyCap, dimensions.copy()));
+			drawOrder.offerFirst(streams.get(name)); // add to front of queue
+		} else {
+			System.err.println("The data stream " + name + " is already present.");
 		}
+	}
+
+	public void removeDataStream(String name) {
+		if (streams.containsKey(name)) {
+			drawOrder.remove(streams.get(name));
+			streams.remove(name);
+		} else {
+			System.err.println("The data stream " + name + " is not present and cannot be removed.");
+		}
+
 	}
 
 	/**
@@ -54,7 +75,11 @@ public class ScrollMonitor extends ProcessingPane {
 	 * @param n              data
 	 */
 	public void push(String dataStreamName, float n) {
-		streams.get(dataStreamName).push(n);
+		if (streams.containsKey(dataStreamName)) {
+			streams.get(dataStreamName).push(n);
+		} else {
+			System.err.println("The data stream " + dataStreamName + " is not present and cannot be pushed to.");
+		}
 	}
 
 	/**
@@ -72,7 +97,11 @@ public class ScrollMonitor extends ProcessingPane {
 	 * Max/ceiling display value for stream
 	 */
 	public void setMaxValue(String dataStream, float value) {
-		streams.get(dataStream).setMaxValue(value);
+		if (streams.containsKey(dataStream)) {
+			streams.get(dataStream).setMaxValue(value);
+		} else {
+			System.err.println("The data stream " + dataStream + " is not present.");
+		}
 	}
 
 	/**
@@ -82,111 +111,148 @@ public class ScrollMonitor extends ProcessingPane {
 	 * @param color
 	 */
 	public void setStreamColour(String dataStream, int color) {
-		streams.get(dataStream).setColor(color);
+		if (streams.containsKey(dataStream)) {
+			streams.get(dataStream).setColor(color);
+		} else {
+			System.err.println("The data stream " + dataStream + " is not present.");
+		}
 	}
 
-	@Override
 	/**
-	 * Draw into Pane's canvas
+	 * Sets how many datapoints the stroke should skip (where 1 is draw every one, 2
+	 * is every other, etc.). Value of 2 can smooth line but may introduce visual
+	 * stuttering as the graph scrolls.
+	 * 
+	 * @param level 1...5
 	 */
-	public void draw() {
-
-		unlockPosition();
-
-		canvas.clear();
-		
-		boolean mouseOverGraph = false; // is any graph mouseover (enforce only one)
-
-		drawBG(streams.values().iterator().next()); // TODO
-
-		int dataStreamIndex = 0;
-		for (DataStream d : streams.values()) { // TODO draw back to front
-			PShape graph = p.createShape();
-			graph.setStrokeWeight(graphStrokeWeight);
-			if (d.fill) {
-				graph.setFill(d.fillColour);
-			} else {
-				graph.noFill();
-			}
-
-			graph.beginShape(); // BEGIN GRAPH PSHAPE
-			graph.fill(d.fillColour);
-			if (!d.outline) {
-				graph.noStroke(); // need to call inside beginShape()
-			} else {
-				graph.stroke(d.stroke); // set stroke colour
-			}
-
-			graph.vertex(-graphStrokeWeight * 2, (dimensions.y - d.getDrawData(0))); // start out of bounds (upper left)
-
-			for (int i = 0; i < d.length; i++) {
-				final float val = d.getDrawData(i);
-				final float vertX = i * (dimensions.x / (d.length - 1)); // calc x coord -- scale to x dimension
-				final float vertY = (dimensions.y) - val;
-				graph.vertex(vertX, vertY);
-			}
-
-			graph.vertex(dimensions.x + graphStrokeWeight, (dimensions.y) - d.getDrawData(d.length - 1)); // draw out of
-																										// bounds to
-																										// hide stroke
-			graph.vertex(dimensions.x + graphStrokeWeight, dimensions.y + graphStrokeWeight); // lower right corner
-			graph.vertex(-graphStrokeWeight, dimensions.y + graphStrokeWeight); // lower left corner
-
-			boolean mouseOverStream = false;
-			if (!mouseOverGraph && withinMoveRegion && !dragging && pointInPoly(graph, PVector.sub(mousePos, position))) { // mouseOver
-																										// test
-				mouseOverGraph = true;
-				mouseOverStream = true;
-				lockPosition();
-				graph.fill(0xff000000 | ~d.fillColour, canvas.alpha(d.fillColour)); // invert rgb, keep alpha TODO @150
-			}
-
-			graph.endShape(PApplet.CLOSE); // END GRAPH PSHAPE
-			canvas.shape(graph);
-
-//			canvas.fill(0);
-//			p.fill(d.fillColour);
-//			p.textAlign(PApplet.LEFT, PApplet.CENTER);
-//			canvas.text(d.getDrawData(d.length - 1), 10 + (55 * dataStreamIndex), 30);
-//			canvas.text(d.getRawData(d.length), 10 + (55 * dataStreamIndex), 50); // TODO
-
-			if (mouseOverStream) {
-				p.cursor(PApplet.CROSS);
-				float x = constrain(mousePos.x, position.x + graphStrokeWeight - 1,
-						position.x + dimensions.x - graphStrokeWeight + 1) - position.x; // constrain mouseOverX
-				float valAtMouse = d.getDrawData((int) (x / (dimensions.x / (d.length - 1))));
-				canvas.stroke(d.stroke);
-				canvas.strokeWeight(max(1, graphStrokeWeight - 0));
-				canvas.line(x, dimensions.y, x, dimensions.y - valAtMouse + 1); // hrzntl line where mouse is
-
-				canvas.textAlign(PApplet.CENTER, PApplet.CENTER);
-				canvas.fill(d.stroke);
-				canvas.text(valAtMouse, x, PApplet.max(dimensions.y - valAtMouse - 25, 0));
-
-				p.textAlign(PApplet.CENTER, PApplet.TOP);
-				p.fill(0, 255, 0);
-				p.text(round(valAtMouse) + d.dataUnit, x + position.x, position.y + dimensions.y + 10);
-				canvas.text(d.name, 10 + (dataStreamIndex*20), 10); // display name of mouse-overed stream
-			}
-			else {
-				p.fill(0); // black y-axis label
-			}
-
-			p.textAlign(PApplet.LEFT, PApplet.CENTER);
-			
-			p.text(round(d.paused ? d.getPauseValue() : d.getRawData(d.length)) + d.dataUnit, position.x + dimensions.x + 10,
-					position.y + (dimensions.y - d.getDrawData(d.length - 1))); // y-axis val TODO color = ~bg
-
-			dataStreamIndex++;
+	public void setDrawSmoothing(int level) {
+		// TODO
+	}
+	
+	/**
+	 * Bring a given to the front of rendering (render on top of other streams).
+	 * @param dataStream
+	 */
+	public void bringToFront(String dataStream) {
+		if (streams.containsKey(dataStream)) {
+			DataStream d = streams.get(dataStream);
+			drawOrder.remove(d);
+			drawOrder.offerLast(d);
+		} else {
+			System.err.println("The data stream " + dataStream + " is not present.");
 		}
 	}
 
 	@Override
-	public void post() {
+	/**
+	 * Draw into Pane's canvas. Datastreams are drawn in the order of add (first
+	 * added is drawn first, most recently added is drawn at the back).
+	 */
+	void draw() {
+
+//		unlockPosition();
+
+		canvas.clear();
+
+		drawBG(drawOrder.getFirst()); // TODO
+
+		HashMap<DataStream, PShape> shapes = new HashMap<>(streams.size()); // cache PShapes; draw in reverse after
+
+		for (DataStream d : streams.values()) { // populate PShapes -- order irrelevant
+			if (d.draw) {
+				PShape graphShape = p.createShape();
+				graphShape.setStrokeWeight(graphStrokeWeight);
+
+				graphShape.beginShape(); // BEGIN GRAPH PSHAPE
+
+				if (!d.outline) {
+					graphShape.noStroke(); // need to call inside beginShape()
+				} else {
+					graphShape.stroke(d.stroke); // set stroke colour
+				}
+
+				graphShape.vertex(-graphStrokeWeight * 2, (dimensions.y - d.getDrawData(0))); // start out of bounds
+																								// (upper
+																								// left)
+
+				float val, vertX, vertY;
+				for (int i = 0; i < d.length; i += 2) { // populate every other point (to smooth graph)
+					val = d.getDrawData(i);
+					vertX = i * (dimensions.x / (d.length - 1)); // calc x coord -- scale to x dimension
+					vertY = (dimensions.y) - val;
+					graphShape.vertex(vertX, vertY);
+				}
+
+				// draw out of bounds to hide stroke
+				graphShape.vertex(dimensions.x + graphStrokeWeight, (dimensions.y) - d.getDrawData(d.length - 1));
+				graphShape.vertex(dimensions.x + graphStrokeWeight, dimensions.y + graphStrokeWeight); // lower right
+																										// corner
+				graphShape.vertex(-graphStrokeWeight, dimensions.y + graphStrokeWeight); // lower left corner
+				shapes.put(d, graphShape); // finished, but don't close/draw yet
+			}
+		} // end PShape for
+
+		DataStream mouseOverStream = null; // TODO only check if mousepos different
+		
+		for (Iterator<DataStream> drawOrderReverse = drawOrder.descendingIterator(); drawOrderReverse.hasNext();) {
+			DataStream d =  drawOrderReverse.next();
+			if (d.draw) {
+				PShape s = shapes.get(d);
+				if (withinMoveRegion && !dragging && mouseOverStream == null
+						&& pointInPoly(s, PVector.sub(mousePos, position))) {
+					s.fill(0xff000000 | ~d.fillColour, canvas.alpha(d.fillColour) - 10);
+					mouseOverStream = d; // only one datastream can be mouseover
+				} else {
+					if (d.fill) {
+						s.fill(d.fillColour);
+					} else {
+						s.noFill();
+					}
+				}
+				s.endShape(PApplet.CLOSE);
+			}
+		}
+
+		p.textAlign(PApplet.LEFT, PApplet.CENTER);
+		for (DataStream d : drawOrder) { // draw streams most recently added last (on bottom)
+			if (d.draw) {
+				canvas.shape(shapes.get(d));
+				if (d == mouseOverStream) {
+					p.fill(0, 255, 0); // TODO colour
+				} else {
+					p.fill(0);
+				}
+				p.text(round(d.paused ? d.getPauseValue() : d.getRawData(d.length)) + d.dataUnit,
+						position.x + dimensions.x + 10, position.y + (dimensions.y - d.getDrawData(d.length - 1)));
+			}
+		}
+
+		if (mouseOverStream != null) { // draw mouseOverStream info (on top)
+			p.cursor(PApplet.CROSS);
+			float x = constrain(mousePos.x, position.x + graphStrokeWeight - 1,
+					position.x + dimensions.x - graphStrokeWeight + 1) - position.x; // constrain mouseOverX
+			float valAtMouse = mouseOverStream.getDrawData((int) (x / (dimensions.x / (mouseOverStream.length - 1))));
+			canvas.stroke(mouseOverStream.stroke);
+			canvas.strokeWeight(max(1, graphStrokeWeight - 0));
+			canvas.line(x, dimensions.y, x, dimensions.y - valAtMouse + 1); // hrzntl line where mouse is
+
+			canvas.textAlign(PApplet.CENTER, PApplet.CENTER);
+			canvas.fill(mouseOverStream.stroke);
+			canvas.text(valAtMouse, x, PApplet.max(dimensions.y - valAtMouse - 25, 0));
+
+			p.textAlign(PApplet.CENTER, PApplet.TOP);
+			p.fill(0, 255, 0);
+			p.text(round(valAtMouse) + mouseOverStream.dataUnit, x + position.x, position.y + dimensions.y + 10);
+			canvas.text(mouseOverStream.name, 10, 10); // display name of mouse-overed stream
+		}
+	}
+
+	@Override
+	void post() {
 		p.noFill();
 		p.strokeWeight(monitorBorderWeight * 2);
-		p.rect(position.x - monitorBorderWeight, position.y - monitorBorderWeight, dimensions.x + 2 * monitorBorderWeight - 1,
-				dimensions.y + 2 * monitorBorderWeight - 1);
+		p.rect(position.x - monitorBorderWeight, position.y - monitorBorderWeight,
+				dimensions.x + 2 * monitorBorderWeight - 1, dimensions.y + 2 * monitorBorderWeight - 1);
 	}
 
 	@Override
@@ -195,11 +261,6 @@ public class ScrollMonitor extends ProcessingPane {
 			d.setDrawDimensions(dimensions.copy());
 			d.setMaxValue(d.maxValue);
 		}
-	}
-
-	@Override
-	void move() {
-		// TODO Auto-generated method stub
 	}
 
 	/**
@@ -221,43 +282,64 @@ public class ScrollMonitor extends ProcessingPane {
 	 * Pause the view (data pushing is not blocked).
 	 */
 	public void unPause() {
-		pause = false;
-		for (DataStream d : streams.values()) {
-			d.resume();
+		if (pause) {
+			pause = false;
+			for (DataStream d : streams.values()) {
+				d.resume();
+			}
 		}
 	}
-	
+
 	/**
 	 * Pause a given dataStream from scrolling, display the data at pausing until
 	 * resumed. It will still recieve data pushed in, but will not display until it
 	 * is resumed.
 	 */
 	public void pauseDatastream(String dataStream) {
-		streams.get(dataStream).pause();
+		if (streams.containsKey(dataStream)) {
+			streams.get(dataStream).pause();
+		} else {
+			System.err.println("The data stream " + dataStream + " is not present.");
+		}
 	}
 
 	/**
 	 * Pause the view (data pushing is not blocked).
 	 */
 	public void unPauseDatastream(String dataStream) {
-		streams.get(dataStream).resume();
-	}
-	
-	public void hideDatastream(String datastream) {
-		// TODO
+		if (streams.containsKey(dataStream)) {
+			streams.get(dataStream).resume();
+		} else {
+			System.err.println("The data stream " + dataStream + " is not present.");
+		}
 	}
 
-	public void showDatastream(String datastream) {
-		// TODO
+	public void hideDatastream(String dataStream) {
+		if (streams.containsKey(dataStream)) {
+			streams.get(dataStream).draw = false;
+		} else {
+			System.err.println("The data stream " + dataStream + " is not present.");
+		}
+	}
+
+	public void showDatastream(String dataStream) {
+		if (streams.containsKey(dataStream)) {
+			streams.get(dataStream).draw = true;
+		} else {
+			System.err.println("The data stream " + dataStream + " is not present.");
+		}
 	}
 
 	/**
 	 * Pause the view (data pushing is not blocked).
+	 * 
 	 * @see #pause()
 	 * @see #unPause()
 	 */
 	public void togglePause() {
-		// TODO
+		pause = !pause;
+		pause();
+		unPause();
 	}
 
 	@Override
@@ -284,22 +366,26 @@ public class ScrollMonitor extends ProcessingPane {
 		canvas.fill(50, 125, 250, 150); // bg
 //		canvas.noFill();
 		canvas.noStroke();
-		// canvas.stroke(255, 255, 0); // TODO
+//		canvas.stroke(0); // TODO
 		canvas.rect(0, 0, dimensions.x, dimensions.y); // BG
 
 		canvas.stroke(0, 150); // guidelines
 		canvas.strokeWeight(1); // guidelines
 
 		float hSegments = 4; // graph segments, not lines
-		for (int i = 0; i < hSegments + 1; i++) { // draw horizontal guidelines
+		p.fill(0);
+		p.textAlign(PApplet.RIGHT, PApplet.CENTER);
+		for (int i = 0; i < hSegments; i++) { // draw horizontal guidelines
 			float y = dimensions.y - i * (dimensions.y / (hSegments + 0));
 			canvas.line(0, y, dimensions.x, y);
-			p.fill(0);
-			p.textAlign(PApplet.RIGHT, PApplet.CENTER);
 			p.text(round(yAxisMax / hSegments * i), position.x - 10, position.y + y);
 		} // calc valuse based on stream max value Y
+		p.text(round(yAxisMax / hSegments * hSegments), position.x - 10,
+				position.y + dimensions.y - hSegments * (dimensions.y / (hSegments + 0))); // label, no line
 
+		p.textAlign(PApplet.CENTER, PApplet.BOTTOM);
 		float vSegments = 4; // graph segments, not lines
+		float z = dataPoints / vSegments;
 		for (int i = 0; i < vSegments; i++) { // draw vertical guidelines
 
 			float xPos = Math.floorMod(
@@ -307,6 +393,8 @@ public class ScrollMonitor extends ProcessingPane {
 							- ((pause ? pauseFrameCount : p.frameCount) * dimensions.x / d.length))),
 					(int) dimensions.x);
 			canvas.line(xPos, 0, xPos, dimensions.y);
+			p.text((int) (p.frameCount - ((p.frameCount % dataPoints)) + (z * i)), position.x + xPos,
+					position.y - 2 - monitorBorderWeight);
 		}
 	}
 
@@ -319,22 +407,23 @@ public class ScrollMonitor extends ProcessingPane {
 	 */
 	private static final boolean pointInPoly(PShape s, PVector point) {
 
-		boolean c = false;
+		boolean within = false;
 		int j = s.getVertexCount() - 1;
 
 		for (int i = 0; i < s.getVertexCount(); i++) {
 			final PVector v = s.getVertex(i);
 			final PVector b = s.getVertex(j);
 			if (((v.y > point.y) != (b.y > point.y)) && (point.x < (b.x - v.x) * (point.y - v.y) / (b.y - v.y) + v.x)) {
-				c = !c;
+				within = !within;
 			}
 			j = i;
 		}
-		return c;
+		return within;
 	}
-	
+
 	/**
-	 * Invert a RGBA color [0-255,0-255,0-255,0-255] 
+	 * Invert a RGBA color [0-255,0-255,0-255,0-255] TODO
+	 * 
 	 * @param colour
 	 * @return
 	 */

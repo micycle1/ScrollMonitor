@@ -20,6 +20,8 @@ import processing.event.MouseEvent;
  * A generic window pane to use for Processing GUI windows/areas. Ambivalent to
  * the contents of its canvas (PGraphics).
  * 
+ * Developed in a generic manner for ScrollMonitor, enabling easy use in other projects. 
+ * 
  * @author micycle1
  *
  */
@@ -29,15 +31,17 @@ abstract class ProcessingPane {
 	PGraphics canvas; // Pane graphics (sub-class should draw into this)
 	PVector position, dimensions;
 	PVector mousePos, mouseDownPos;
-
+	
 	/**
 	 * Tracks from which side(s) the monitor is being resized.
 	 */
 	private boolean[] resizeSides = new boolean[4]; // L,U,D,R
 	boolean dragging = false, resizing = false; // Also exposed in method callbacks
+	
+	private boolean drawBorder = false;
 
 	/**
-	 * Rendering mode of parent PApplet (used when changing mouse cursor)
+	 * Rendering mode of parent PApplet (used when resizing to change mouse cursor)
 	 */
 	private enum RENDERERS {
 		JAVA2D, JAVAFX, JOGL
@@ -96,9 +100,10 @@ abstract class ProcessingPane {
 				renderer = RENDERERS.JAVA2D;
 				canvasAWT = (java.awt.Canvas) ((PSurfaceAWT) p.getSurface()).getNative();
 				break;
+			case "processing.opengl.PGraphics3D" :
+			case "processing.opengl.PGraphics2D" :
 			default :
 				renderer = RENDERERS.JOGL;
-				break;
 		}
 
 		p.registerMethod("mouseEvent", this);
@@ -111,6 +116,11 @@ abstract class ProcessingPane {
 		draw();
 		canvas.endDraw();
 		p.image(canvas, position.x, position.y);
+		if (drawBorder) {
+			p.noFill();
+			p.stroke(0);
+			p.rect(position.x, position.y, dimensions.x, dimensions.y);
+		}
 		post();
 	}
 
@@ -158,14 +168,25 @@ abstract class ProcessingPane {
 		}
 	}
 
-	public abstract void draw();
+	abstract void draw();
 
 	/**
 	 * Draw stuff after canvas has been written to PApplet.
 	 */
-	public void post() {
-	};
+	void post() {
+	}
+	
+	/**
+	 * Called then pane is resized.
+	 */
+	void resize() {
+	}
 
+	/**
+	 * Called when pane is being moved
+	 */
+	void move() {
+	}
 
 	private final void resizeInternal() {
 		PVector posBound = PVector.add(cachePos, cacheDimensions).sub(minimumDimensions); // stops moving the monitor
@@ -207,16 +228,6 @@ abstract class ProcessingPane {
 		resize();
 	}
 
-	/**
-	 * Called then pane is resized.
-	 */
-	abstract void resize();
-
-	/**
-	 * Called when pane is being moved
-	 */
-	abstract void move();
-
 	final void lockPosition() {
 		lockPosition = true;
 	}
@@ -231,6 +242,14 @@ abstract class ProcessingPane {
 
 	final void unlockDimensions() {
 		lockDimensions = false;
+	}
+	
+	final void showBorder() {
+		drawBorder = true;
+	}
+	
+	final void hideBorder() {
+		drawBorder = false;
 	}
 
 	private void calcSidesMouseOver() {
@@ -348,8 +367,6 @@ abstract class ProcessingPane {
 				mouseWheel(e);
 				break;
 			case processing.event.MouseEvent.DRAG :
-				// moving();
-				// resize();
 				mouseDragged(e);
 				break;
 			default :
