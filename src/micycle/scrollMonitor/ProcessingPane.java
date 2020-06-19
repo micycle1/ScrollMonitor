@@ -145,7 +145,7 @@ abstract class ProcessingPane {
 
 		if (mouseOverPane) {
 			if (withinMoveRegion && !lockPosition) {
-				p.cursor(PApplet.MOVE);
+				mouseOver();
 			} else {
 				if (!lockDimensions) {
 					calcSidesMouseOver();
@@ -186,6 +186,12 @@ abstract class ProcessingPane {
 	 * Called when pane is being moved
 	 */
 	void move() {
+	}
+	
+	/**
+	 * Called when mouse is over pane (within move region, not border)
+	 */
+	void mouseOver() {
 	}
 
 	private final void resizeInternal() {
@@ -341,7 +347,6 @@ abstract class ProcessingPane {
 								PVector.add(position, dimensions).sub(mouseResizeBuffer));
 						cachePos = position.copy();
 						if (withinMoveRegion && !lockPosition) { // moving
-							p.cursor(PApplet.MOVE);
 							dragging = true;
 						} else { // resizing
 							if (!lockDimensions) {

@@ -72,7 +72,7 @@ final class DataStream implements Comparable<DataStream> {
 	final int length;
 	int direction = 1; // 1 scroll to left; -1 scroll to right
 	PVector drawDimensions; // used to scale raw data for draw data
-	final String dataUnit; // optional data label for axis values
+	String dataUnit = ""; // optional data label for axis values
 
 	float drawDataCache[]; // returns this when paused
 	private int pointerCache;
@@ -106,7 +106,6 @@ final class DataStream implements Comparable<DataStream> {
 		fill = true;
 		outline = true;
 		this.drawDimensions = drawDimensions;
-		dataUnit = " " + "MB/s"; // TODO
 	}
 
 	/**
