@@ -6,6 +6,11 @@ A single scroll monitor supports multiple data streams (line plots).
 
 Define a data stream by giving it a string identifier and then push data to it using that identifier.
 
+Example:
+A ScrollMonitor with one datastream:
+
+A ScrollMonitor with multiple datastreams (y-axis max is defined per monitor):
+
 ## Aims
 * Aesthetic
 * Performant
