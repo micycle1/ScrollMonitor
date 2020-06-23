@@ -7,14 +7,15 @@ import java.util.Arrays;
 import processing.core.PVector;
 
 /**
- * Encapsulates Container for data, index, queue position, draw-data etc. Supports
- * smoothing in the form of a moving average. To this end, the length of the
- * data array must be of size= size+smoothingSize so the first data item we want
- * to see can be smoothed, rather than skipping the first smoothingSize items.
- * TODO dynamic ordering / opacity based on mouse-over/highest value TODO max
- * datapoint/history size (purged thereafter) & viewable datapoints,
+ * Encapsulates Container for data, index, queue position, draw-data etc.
+ * Supports smoothing in the form of a moving average. To this end, the length
+ * of the data array must be of size= size+smoothingSize so the first data item
+ * we want to see can be smoothed, rather than skipping the first smoothingSize
+ * items. TODO dynamic ordering / opacity based on mouse-over/highest value TODO
+ * max datapoint/history size (purged thereafter) & viewable datapoints,
  * 
- * does not draw the data itself, this is left to scrollmonitor
+ * does not draw the data itself, this is left to scrollmonitor; provides the
+ * data only.
  * 
  * @author micycle1
  *
@@ -73,11 +74,17 @@ final class DataStream implements Comparable<DataStream> {
 	int direction = 1; // 1 scroll to left; -1 scroll to right
 	PVector drawDimensions; // used to scale raw data for draw data
 	String dataUnit = ""; // optional data label for axis values
+	
+	float maxLiveValue; // current maximum value, used for datastream dynamically y axis
 
-	float drawDataCache[]; // returns this when paused
+	float[] drawDataCache; // returns this when paused
+	float[] rawDataCache; // returns this to streaMouseOver when paused
 	private int pointerCache;
+	/**
+	 * When true, stream will return data as it was then the paused flag became true
+	 * (drawDataCache)
+	 */
 	boolean paused = false;
-	private float pauseValue;
 	boolean draw = true; // draw/render this datastream?
 
 	/**
@@ -92,17 +99,17 @@ final class DataStream implements Comparable<DataStream> {
 		active = true;
 		smoothing = 0;
 		pointer = 0;
-		
+
 		data = new float[length + smoothing];
 		Arrays.fill(data, -1); // init to -1 so not drawn by stroke
-		
-		data[0] = -1.9876f; // mark for inital smoothing history generation 
+
+		data[0] = -1.987654f; // mark for inital smoothing history generation
 		fillColour = -1232323; // p.color(50, 50, 130, 150); // TODO
 		stroke = -12389127; // p.color(255, 80, 180, 100);
-		
+
 		drawData = new float[length];
 		Arrays.fill(drawData, -1); // init to -1 so not drawn by stroke
-		
+
 		fill = true;
 		outline = true;
 		this.drawDimensions = drawDimensions;
@@ -115,23 +122,23 @@ final class DataStream implements Comparable<DataStream> {
 	 */
 	void push(float datum) {
 
-		if (pointer == 0 && this.data[0] == -1.9876f) { // on first data point, generate moving average
-																// data,
-																// append to end of array because pointer starts at
-																// 0, so will look
-																// backwards for history
+		// on the first data point, generate moving average data, and append data to end
+		// of the array
+		// because the pointer starts at 0, so will it look backwards (wrap around to
+		// the end of the array) for history
+		if (pointer == 0 && data[0] == -1.987654f) {
 			for (int i = 0; i < smoothing; i++) {
-				this.data[length + smoothing - i] = datum;
+				data[length + smoothing - i] = datum;
 			}
 		}
 
-		this.data[pointer] = datum; // push raw datum
+		data[pointer] = datum; // push raw datum
 
 		float drawData = datum; // sum of moving average
 		for (int i = 0; i < smoothing; i++) { // calc moving average
 			int newPointer = Math.floorMod(pointer - 1 - i, length + smoothing); // pointer to previous data, can
 																					// wrap around
-			drawData += this.data[newPointer]; // sum moving average
+			drawData += data[newPointer]; // sum moving average
 		}
 		drawData /= (smoothing + 1); // divide to get average
 
@@ -167,7 +174,7 @@ final class DataStream implements Comparable<DataStream> {
 
 	void setMaxValue(float maxValue) {
 		this.maxValue = maxValue;
-		// TODO recalc drawvalues w/ smoothing
+		// TODO recalc drawvalues w/ smoothing when changed
 		for (int i = 0; i < drawData.length; i++) {
 			drawData[i] = constrain(data[i], -1, maxValue - 1) * (drawDimensions.y / maxValue); // -1 because of stroke
 		}
@@ -182,14 +189,7 @@ final class DataStream implements Comparable<DataStream> {
 	}
 
 	void setUnit(String unit) {
-
-	}
-	
-	/**
-	 * Last value when paused
-	 */
-	protected float getPauseValue() {
-		return pauseValue;
+		dataUnit = unit;
 	}
 
 	/**
@@ -202,8 +202,7 @@ final class DataStream implements Comparable<DataStream> {
 	float getDrawData(int index) {
 		if (paused) {
 			int i = Math.floorMod(pointerCache + index - 1, length + smoothing); // -1, because pointer is incremented
-																					// after
-			// push
+																					// after push
 			return drawDataCache[i];
 		} else {
 			int i = Math.floorMod(pointer + index - 1, length + smoothing); // -1, because pointer is incremented after
@@ -213,30 +212,38 @@ final class DataStream implements Comparable<DataStream> {
 	}
 
 	/**
-	 * Get draw data that is logically at the index given (where 0 is left most
-	 * datapoint)
+	 * Get raw data (data pushed to stream) that is logically at the index given
+	 * (where 0 is left most datapoint)
 	 * 
 	 * @param index
 	 * @return
 	 */
-	float getRawData(int index) { // TODO
-		int i = Math.floorMod(pointer - 1 + index - length, length + smoothing);
-		return data[i];
+	float getRawData(int index) {
+		if (paused) {
+			int i = Math.floorMod(pointerCache - 1 + index - length, length + smoothing);
+			return rawDataCache[i];
+		}
+		else {
+			int i = Math.floorMod(pointer - 1 + index - length, length + smoothing);
+			return data[i];
+		}
 	}
-
+	
 	void setDrawDimensions(PVector drawDimensions) {
 		this.drawDimensions = drawDimensions;
 	}
 
 	void pause() {
-		paused = true;
-		pauseValue = getRawData(length);
-		pointerCache = pointer;
 		drawDataCache = drawData.clone();
+		rawDataCache = data.clone();
+		paused = true;
+		pointerCache = pointer;
 	}
 
 	void resume() {
 		paused = false;
+		drawDataCache = null; // release memory
+		rawDataCache = null; // release memory
 	}
 
 	/**

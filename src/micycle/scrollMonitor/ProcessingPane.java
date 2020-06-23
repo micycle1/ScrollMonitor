@@ -17,10 +17,12 @@ import processing.event.KeyEvent;
 import processing.event.MouseEvent;
 
 /**
- * A generic window pane to use for Processing GUI windows/areas. Ambivalent to
- * the contents of its canvas (PGraphics).
+ * A generic window pane to use for GUI windows/areas in Processing. A
+ * ProcessingPane is ambivalent to the contents of its canvas (a PGraphics
+ * object).
  * 
- * Developed in a generic manner for ScrollMonitor, enabling easy use in other projects. 
+ * ProcessingPane has been developed in a *generic* manner for ScrollMonitor,
+ * enabling easy use in any other unrelated projects.
  * 
  * @author micycle1
  *
@@ -31,13 +33,13 @@ abstract class ProcessingPane {
 	PGraphics canvas; // Pane graphics (sub-class should draw into this)
 	PVector position, dimensions;
 	PVector mousePos, mouseDownPos;
-	
+
 	/**
 	 * Tracks from which side(s) the monitor is being resized.
 	 */
 	private boolean[] resizeSides = new boolean[4]; // L,U,D,R
 	boolean dragging = false, resizing = false; // Also exposed in method callbacks
-	
+
 	private boolean drawBorder = false;
 
 	/**
@@ -68,7 +70,7 @@ abstract class ProcessingPane {
 	/**
 	 * Is mouse over the pane?
 	 */
-	boolean mouseOverPane = false;
+	boolean mouseOverPane = false, pmouseOverPane = false;
 
 	/**
 	 * is mouse over the valid move region (smaller than {@link #mouseOverPane})
@@ -110,6 +112,9 @@ abstract class ProcessingPane {
 		p.registerMethod("keyEvent", this);
 	}
 
+	/**
+	 * Updates the pane and draws its contents within the parent PApplet.
+	 */
 	public final void run() {
 		update(); // resizing & dragging, etc.
 		canvas.beginDraw();
@@ -124,6 +129,10 @@ abstract class ProcessingPane {
 		post();
 	}
 
+	/**
+	 * Internal method to update things pertaining to the pane not the canvas it
+	 * contains.
+	 */
 	private final void update() { // pre#
 
 		mousePos = new PVector(constrain(p.mouseX, 0, p.width), constrain(p.mouseY, 0, p.height));
@@ -164,8 +173,12 @@ abstract class ProcessingPane {
 				}
 			}
 		} else {
-			p.cursor(PApplet.ARROW);
+			if (pmouseOverPane) {
+				// change only once on mouse exit so multiple panes don't reset cursor for others
+				p.cursor(PApplet.ARROW);
+			}
 		}
+		pmouseOverPane = mouseOverPane;
 	}
 
 	abstract void draw();
@@ -175,7 +188,7 @@ abstract class ProcessingPane {
 	 */
 	void post() {
 	}
-	
+
 	/**
 	 * Called then pane is resized.
 	 */
@@ -187,7 +200,7 @@ abstract class ProcessingPane {
 	 */
 	void move() {
 	}
-	
+
 	/**
 	 * Called when mouse is over pane (within move region, not border)
 	 */
@@ -227,7 +240,7 @@ abstract class ProcessingPane {
 			} else { // ↓
 				dimensions.set(dimensions.x, max(newDims2.y, minimumDimensions.y));
 			}
-		} else if (resizeSides[3]) { // → 
+		} else if (resizeSides[3]) { // →
 			dimensions.set(max(newDims2.x, minimumDimensions.x), dimensions.y);
 		}
 		canvas = p.createGraphics((int) dimensions.x, (int) dimensions.y);
@@ -249,18 +262,17 @@ abstract class ProcessingPane {
 	final void unlockDimensions() {
 		lockDimensions = false;
 	}
-	
+
 	final void showBorder() {
 		drawBorder = true;
 	}
-	
+
 	final void hideBorder() {
 		drawBorder = false;
 	}
 
 	private void calcSidesMouseOver() {
-		resizeSides[0] = withinRegion(mousePos, position,
-				PVector.add(position, new PVector(mouseResizeBuffer.x, dimensions.y))); // L
+		resizeSides[0] = withinRegion(mousePos, position, PVector.add(position, new PVector(mouseResizeBuffer.x, dimensions.y))); // L
 		resizeSides[1] = withinRegion(mousePos, position,
 				PVector.add(position, new PVector(dimensions.x + mouseResizeBuffer.x, mouseResizeBuffer.y))); // U
 		resizeSides[2] = withinRegion(mousePos, new PVector(0, dimensions.y - mouseResizeBuffer.y).add(position),
