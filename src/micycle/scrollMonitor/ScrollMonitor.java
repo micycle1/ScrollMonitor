@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedList;
 
 import processing.core.PApplet;
+import processing.core.PConstants;
 import processing.core.PShape;
 import processing.core.PVector;
 import processing.event.KeyEvent;
@@ -38,12 +39,18 @@ public class ScrollMonitor extends ProcessingPane {
 
 	private int graphStrokeWeight = 5; // TODO (define per datastream?), "dynamic" option = maxVal+10%?
 	private int monitorBorderWeight = 2; // TODO
+	
+	private int drawSmoothingLevel = 1;
 
-	float yAxisMax = 200; // TODO remove from datastream
+	private float yAxisMax = 200; // Y-axis maximum value (ceiling)
 	int dataPoints = 300; // or x axis TODO remove from datastream
+	
+	private float xAxisPosition = 0; // top or bottom of graph
 	
 	private int bgSegmentsHorizontal = 4;
 	private int bgSegmentsVertical = 4;
+	
+	private int backgroundColour = -934570246; // default colour
 
 	public ScrollMonitor(PApplet p, PVector position, PVector dimensions, int yAxis) {
 		super(p, position, dimensions);
@@ -141,30 +148,62 @@ public class ScrollMonitor extends ProcessingPane {
 	}
 
 	/**
-	 * Sets the display colour for a given data stream.
+	 * Sets the fill colour of a graph for a given data stream.
 	 * 
 	 * @param dataStream
 	 * @param color      ARGB colour represented by an integer; use Processing's
-	 *                   color() method to generate define values
+	 *                   color() method to generate values
 	 */
-	public void setStreamColour(String dataStream, int color) {
+	public void setStreamFillColour(String dataStream, int color) {
 		if (streams.containsKey(dataStream)) {
-			streams.get(dataStream).setColor(color);
+			streams.get(dataStream).fillColour = color;
 		} else {
 			System.err.println("The data stream " + dataStream + " is not present.");
 		}
 	}
+	
+	/**
+	 * Sets the stroke (outline) colour of a graph for a given data stream.
+	 * 
+	 * @param dataStream
+	 * @param color      ARGB colour represented by an integer; use Processing's
+	 *                   color() method to generate values
+	 */
+	public void setStreamStrokeColour(String dataStream, int color) {
+		if (streams.containsKey(dataStream)) {
+			streams.get(dataStream).strokeColour = color;
+		} else {
+			System.err.println("The data stream " + dataStream + " is not present.");
+		}
+	}
+	
+	/**
+	 * Sets the monitor's background colour. Supports opacity.
+	 * 
+	 * @param colour ARGB colour represented by an integer; use Processing's color()
+	 *               method to generate values
+	 */
+	public void setBackgroundColour(int colour) {
+		backgroundColour = colour;
+	}
 
 	/**
-	 * Level determines how many datapoints the scrollmonitor should skip when
-	 * drawing the stroke for each graph (where 1 is draw every one, 2 is every
-	 * other, etc.). Value of 2 can smooth line but may introduce visual stuttering
-	 * as the graph scrolls.
+	 * Sets the draw smoothing level. This level determines how many datapoints the
+	 * ScrollMonitor should skip when drawing vertices in the graph for each data
+	 * stream. A value of 1 means every data point is drawn (default value); a value
+	 * of 2 means every other data point is drawn; a value of 3 means every third
+	 * data point is drawn, and so on... Higher values result in a smoother line but
+	 * may introduce visual stuttering as the graph scrolls. This value does not
+	 * affect the underlying data, only how each graph is drawn.
 	 * 
-	 * @param level 1...5
+	 * @param level A value of 1 (default, no smoothing) or 2 is recommended.
 	 */
-	public void setDrawSmoothing(int level) {
-		// TODO
+	public void setDrawSmoothing(int smoothingLevel) {
+		if (smoothingLevel < 1) {
+			System.err.println("Smoothing level should be at least 1 (when set to 1, every datapoint is drawn).");
+		} else {
+			drawSmoothingLevel = smoothingLevel;
+		}
 	}
 
 	public void setStreamUnit(String dataStream, String unit) {
@@ -173,6 +212,25 @@ public class ScrollMonitor extends ProcessingPane {
 		} else {
 			System.err.println("The data stream " + dataStream + " is not present.");
 		}
+	}
+	
+	/**
+	 * Sets whether the X-axis labels should be drawn above the monitor, or below
+	 * the monitor.
+	 * 
+	 * @param position Above = 1; Below = 0. You can use Processing's TOP and BOTTOM
+	 *                 constants too.
+	 */
+	public void setXAxisPosition(int position) {
+		if (position == PConstants.TOP || position == 1) {
+			xAxisPosition = 0;
+			return;
+		}
+		if (position == PConstants.BOTTOM || position == 0) {
+			xAxisPosition = dimensions.y + 2 * (2 + monitorBorderWeight);
+			return;
+		}
+		System.err.println("An X-axis position value of " + position + " is not valid.");
 	}
 
 	/**
@@ -224,11 +282,9 @@ public class ScrollMonitor extends ProcessingPane {
 	 */
 	void draw() {
 
-//		unlockPosition();
-
 		canvas.clear();
 
-		drawBG(); // TODO
+		drawBG();
 
 		HashMap<DataStream, PShape> shapes = new HashMap<>(streams.size()); // cache PShapes; draw in reverse after
 
@@ -242,7 +298,7 @@ public class ScrollMonitor extends ProcessingPane {
 				if (!d.outline) {
 					graphShape.noStroke(); // need to call inside beginShape()
 				} else {
-					graphShape.stroke(d.stroke); // set stroke colour
+					graphShape.stroke(d.strokeColour); // set stroke colour
 				}
 
 				graphShape.vertex(-graphStrokeWeight * 2, (dimensions.y - d.getDrawData(0))); // start out of bounds
@@ -250,7 +306,7 @@ public class ScrollMonitor extends ProcessingPane {
 																								// left)
 
 				float val, vertX, vertY;
-				for (int i = 0; i < d.length; i += 1) { // populate every other point (to smooth graph)
+				for (int i = 0; i < d.length; i += drawSmoothingLevel) { // drawSmoothingLevel
 					val = d.getDrawData(i);
 					vertX = i * (dimensions.x / (d.length - 1)); // calc x coord -- scale to x dimension
 					vertY = (dimensions.y) - val;
@@ -262,7 +318,7 @@ public class ScrollMonitor extends ProcessingPane {
 				graphShape.vertex(dimensions.x + graphStrokeWeight, dimensions.y + graphStrokeWeight); // lower right
 																										// corner
 				graphShape.vertex(-graphStrokeWeight, dimensions.y + graphStrokeWeight); // lower left corner
-				shapes.put(d, graphShape); // finished, but don't close/draw yet
+				shapes.put(d, graphShape); // finished populating vertices, but don't close/draw yet
 			}
 		} // end PShape for
 
@@ -273,7 +329,7 @@ public class ScrollMonitor extends ProcessingPane {
 			if (d.draw) {
 				PShape s = shapes.get(d);
 				if (withinMoveRegion && !dragging && mouseOverStream == null && pointInPoly(s, PVector.sub(mousePos, position))) {
-					s.fill(0xff000000 | ~d.fillColour, canvas.alpha(d.fillColour) - 10); // invert col if mouse over
+					s.fill(0xff000000 | ~d.fillColour, canvas.alpha(d.fillColour) - 5); // invert col if mouse over
 					mouseOverStream = d; // only one datastream can be mouseover (detect front to back)
 				} else {
 					if (d.fill) {
@@ -308,12 +364,12 @@ public class ScrollMonitor extends ProcessingPane {
 			float valAtMouse = mouseOverStream.getRawData(mouseOverIndex);
 			float valAtMouseDrawLength = mouseOverStream.getDrawData(mouseOverIndex);
 
-			canvas.stroke(mouseOverStream.stroke);
+			canvas.stroke(mouseOverStream.strokeColour);
 			canvas.strokeWeight(max(1, graphStrokeWeight - 0));
 			canvas.line(x, dimensions.y, x, dimensions.y - valAtMouseDrawLength + 1); // vertical line where mouse is
 
 			canvas.textAlign(PApplet.CENTER, PApplet.CENTER);
-			canvas.fill(mouseOverStream.stroke);
+			canvas.fill(mouseOverStream.strokeColour);
 			canvas.text(valAtMouse, x, PApplet.max(dimensions.y - valAtMouseDrawLength - 25, 0)); // mousePos label
 
 			p.textAlign(PApplet.CENTER, PApplet.TOP);
@@ -334,7 +390,7 @@ public class ScrollMonitor extends ProcessingPane {
 	@Override
 	void resize() {
 		for (DataStream d : streams.values()) {
-			d.setDrawDimensions(dimensions);
+			d.drawDimensions = dimensions.copy();
 			d.setMaxValue(d.maxValue);
 		}
 	}
@@ -437,7 +493,7 @@ public class ScrollMonitor extends ProcessingPane {
 	@Override
 	void keyReleased(KeyEvent e) {
 		switch (e.getKeyCode()) {
-			case 9 : // TAB
+			case PConstants.TAB :
 				if (pause) {
 					unPause();
 				} else {
@@ -455,7 +511,7 @@ public class ScrollMonitor extends ProcessingPane {
 	 * @param d
 	 */
 	private void drawBG() {
-		canvas.fill(75, 150, 250, 200); // bg
+		canvas.fill(backgroundColour); // bg fill
 //		canvas.noFill();
 		canvas.noStroke();
 //		canvas.stroke(0); // TODO
@@ -465,27 +521,38 @@ public class ScrollMonitor extends ProcessingPane {
 		canvas.strokeWeight(1); // guidelines
 
 		p.fill(0);
-		p.textAlign(PApplet.RIGHT, PApplet.CENTER);
-		for (int i = 0; i < bgSegmentsHorizontal; i++) { // draw horizontal guidelines
-			float y = dimensions.y - i * (dimensions.y / (bgSegmentsHorizontal + 0));
-			canvas.line(0, y, dimensions.x, y);
-			p.text(round(yAxisMax / bgSegmentsHorizontal * i), position.x - 10, position.y + y);
-		} // calc values based on stream max value Y
-		p.text(round(yAxisMax / bgSegmentsHorizontal * bgSegmentsHorizontal), position.x - 10,
-				position.y + dimensions.y - bgSegmentsHorizontal * (dimensions.y / (bgSegmentsHorizontal + 0))); // label, no line
+		
+		if (bgSegmentsHorizontal > 0) {
+			p.textAlign(PApplet.RIGHT, PApplet.CENTER);
+			for (int i = 0; i < bgSegmentsHorizontal; i++) { // draw horizontal guidelines
+				float y = dimensions.y - i * (dimensions.y / (bgSegmentsHorizontal + 0));
+				canvas.line(0, y, dimensions.x, y);
+				p.text(round(yAxisMax / bgSegmentsHorizontal * i), position.x - 10, position.y + y);
+			} // calc values based on stream max value Y
+			p.text(round(yAxisMax / bgSegmentsHorizontal * bgSegmentsHorizontal), position.x - 10,
+					position.y + dimensions.y - bgSegmentsHorizontal * (dimensions.y / (bgSegmentsHorizontal + 0))); // label, no line
+		}
 
-		p.textAlign(PApplet.CENTER, PApplet.BOTTOM);
-		float z = dataPoints / bgSegmentsVertical;
-		for (int i = 0; i < bgSegmentsVertical; i++) { // draw vertical guidelines
-			float xPos = Math.floorMod((int) ((i * (dimensions.x / bgSegmentsVertical)
-					- ((pause ? pauseFrameCount : p.frameCount) * dimensions.x / dataPoints))), (int) dimensions.x);
-			canvas.line(xPos, 0, xPos, dimensions.y);
-			p.text((int) (p.frameCount - ((p.frameCount % dataPoints)) + (z * i)), position.x + xPos, position.y - 2 - monitorBorderWeight);
+		if (bgSegmentsVertical > 0) {
+			if (xAxisPosition == 0) {
+				p.textAlign(PApplet.CENTER, PApplet.BOTTOM);
+			}
+			else {
+				p.textAlign(PApplet.CENTER, PApplet.TOP);
+			}
+			float z = dataPoints / bgSegmentsVertical;
+			for (int i = 0; i < bgSegmentsVertical; i++) { // draw vertical guidelines
+				float xPos = Math.floorMod((int) ((i * (dimensions.x / bgSegmentsVertical)
+						- ((pause ? pauseFrameCount : p.frameCount) * dimensions.x / dataPoints))), (int) dimensions.x);
+				canvas.line(xPos, 0, xPos, dimensions.y);
+				p.text((int) (p.frameCount - ((p.frameCount % dataPoints)) + (z * i)), position.x + xPos,
+						position.y - 2 - monitorBorderWeight + xAxisPosition); // draw x-axis labels
+			}
 		}
 	}
 
 	/**
-	 * Determine if a point is in a polygon, given by a lit of its vertices.
+	 * Determine if a point is in a polygon, given by a list of its vertices.
 	 * 
 	 * @param s     PShape
 	 * @param point PVector point to check

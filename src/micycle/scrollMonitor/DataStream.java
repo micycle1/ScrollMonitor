@@ -42,11 +42,11 @@ final class DataStream implements Comparable<DataStream> {
 	/**
 	 * Stoke (outline) color
 	 */
-	int stroke;
+	int strokeColour;
 	/**
 	 * Data smoothing (moving average)
 	 */
-	int smoothing;
+	private int smoothing;
 	/**
 	 * Data (raw)
 	 */
@@ -104,8 +104,8 @@ final class DataStream implements Comparable<DataStream> {
 		Arrays.fill(data, -1); // init to -1 so not drawn by stroke
 
 		data[0] = -1.987654f; // mark for inital smoothing history generation
-		fillColour = -1232323; // p.color(50, 50, 130, 150); // TODO
-		stroke = -12389127; // p.color(255, 80, 180, 100);
+		fillColour = -1232323; // p.color(50, 50, 130, 150);
+		strokeColour = -12389127; // p.color(255, 80, 180, 100);
 
 		drawData = new float[length];
 		Arrays.fill(drawData, -1); // init to -1 so not drawn by stroke
@@ -180,18 +180,6 @@ final class DataStream implements Comparable<DataStream> {
 		}
 	}
 
-	void setColor(int color) {
-		this.fillColour = color;
-	}
-
-	void setActive(boolean active) {
-		this.active = active;
-	}
-
-	void setUnit(String unit) {
-		dataUnit = unit;
-	}
-
 	/**
 	 * Get draw data that is logically at the index given (where 0 is left most
 	 * datapoint) or, ordered by recency, where 0 is oldest data point
@@ -227,10 +215,6 @@ final class DataStream implements Comparable<DataStream> {
 			int i = Math.floorMod(pointer - 1 + index - length, length + smoothing);
 			return data[i];
 		}
-	}
-	
-	void setDrawDimensions(PVector drawDimensions) {
-		this.drawDimensions = drawDimensions;
 	}
 
 	void pause() {
