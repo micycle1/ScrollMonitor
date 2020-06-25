@@ -24,7 +24,8 @@ import processing.event.KeyEvent;
  * 
  * TODO scroll wheel zoom x-axis; shft+scroll+mouseover zoom y-axis
  * 
- * TODO option to scroll if data not pushed (per time, or per frame) by adding empty data
+ * TODO option to scroll if data not pushed (per time, or per frame) by adding
+ * empty data
  * 
  * @author micycle1
  *
@@ -39,17 +40,17 @@ public class ScrollMonitor extends ProcessingPane {
 
 	private int graphStrokeWeight = 5; // TODO (define per datastream?), "dynamic" option = maxVal+10%?
 	private int monitorBorderWeight = 2; // TODO
-	
+
 	private int drawSmoothingLevel = 1;
 
 	private float yAxisMax = 200; // Y-axis maximum value (ceiling)
 	int dataPoints = 300; // or x axis TODO remove from datastream
-	
+
 	private float xAxisPosition = 0; // top or bottom of graph
-	
+
 	private int bgSegmentsHorizontal = 4;
 	private int bgSegmentsVertical = 4;
-	
+
 	private int backgroundColour = -934570246; // default colour
 
 	public ScrollMonitor(PApplet p, PVector position, PVector dimensions, int yAxis) {
@@ -130,7 +131,7 @@ public class ScrollMonitor extends ProcessingPane {
 		yAxisMax = value;
 		streams.values().forEach(stream -> stream.maxValue = value);
 	}
-	
+
 	/**
 	 * Sets the Y axis to dynamically scale its ceiling value based on the maximum
 	 * value that is currently present in a given datastream. Rather than a fixed
@@ -161,7 +162,7 @@ public class ScrollMonitor extends ProcessingPane {
 			System.err.println("The data stream " + dataStream + " is not present.");
 		}
 	}
-	
+
 	/**
 	 * Sets the stroke (outline) colour of a graph for a given data stream.
 	 * 
@@ -176,7 +177,7 @@ public class ScrollMonitor extends ProcessingPane {
 			System.err.println("The data stream " + dataStream + " is not present.");
 		}
 	}
-	
+
 	/**
 	 * Sets the monitor's background colour. Supports opacity.
 	 * 
@@ -213,7 +214,7 @@ public class ScrollMonitor extends ProcessingPane {
 			System.err.println("The data stream " + dataStream + " is not present.");
 		}
 	}
-	
+
 	/**
 	 * Sets whether the X-axis labels should be drawn above the monitor, or below
 	 * the monitor.
@@ -288,7 +289,10 @@ public class ScrollMonitor extends ProcessingPane {
 
 		HashMap<DataStream, PShape> shapes = new HashMap<>(streams.size()); // cache PShapes; draw in reverse after
 
-		for (DataStream d : streams.values()) { // populate PShapes -- order irrelevant
+		DataStream mouseOverStream = null; // The top-most datastream (graph) that the mouse is over
+
+		for (Iterator<DataStream> drawOrderReverse = drawOrder.descendingIterator(); drawOrderReverse.hasNext();) {
+			DataStream d = drawOrderReverse.next();
 			if (d.draw) {
 				PShape graphShape = p.createShape();
 				graphShape.setStrokeWeight(graphStrokeWeight);
@@ -301,9 +305,8 @@ public class ScrollMonitor extends ProcessingPane {
 					graphShape.stroke(d.strokeColour); // set stroke colour
 				}
 
-				graphShape.vertex(-graphStrokeWeight * 2, (dimensions.y - d.getDrawData(0))); // start out of bounds
-																								// (upper
-																								// left)
+				// start shape out of bounds(upper left)
+				graphShape.vertex(-graphStrokeWeight * 2, (dimensions.y - d.getDrawData(0)));
 
 				float val, vertX, vertY;
 				for (int i = 0; i < d.length; i += drawSmoothingLevel) { // drawSmoothingLevel
@@ -315,33 +318,26 @@ public class ScrollMonitor extends ProcessingPane {
 
 				// draw out of bounds to hide stroke
 				graphShape.vertex(dimensions.x + graphStrokeWeight, (dimensions.y) - d.getDrawData(d.length - 1));
-				graphShape.vertex(dimensions.x + graphStrokeWeight, dimensions.y + graphStrokeWeight); // lower right
-																										// corner
+				graphShape.vertex(dimensions.x + graphStrokeWeight, dimensions.y + graphStrokeWeight); // LR corner
 				graphShape.vertex(-graphStrokeWeight, dimensions.y + graphStrokeWeight); // lower left corner
-				shapes.put(d, graphShape); // finished populating vertices, but don't close/draw yet
-			}
-		} // end PShape for
 
-		DataStream mouseOverStream = null; // TODO only check if mousepos different
-
-		for (Iterator<DataStream> drawOrderReverse = drawOrder.descendingIterator(); drawOrderReverse.hasNext();) {
-			DataStream d = drawOrderReverse.next();
-			if (d.draw) {
-				PShape s = shapes.get(d);
-				if (withinMoveRegion && !dragging && mouseOverStream == null && pointInPoly(s, PVector.sub(mousePos, position))) {
-					s.fill(0xff000000 | ~d.fillColour, canvas.alpha(d.fillColour) - 5); // invert col if mouse over
+				// finished populating vertices, now check whether mouse is over graph pshape
+				if (withinMoveRegion && !dragging && mouseOverStream == null && pointInPoly(graphShape, PVector.sub(mousePos, position))) {
+					graphShape.fill(0xff000000 | ~d.fillColour, canvas.alpha(d.fillColour) - 5); // invert col if mouse over
 					mouseOverStream = d; // only one datastream can be mouseover (detect front to back)
 				} else {
 					if (d.fill) {
-						s.fill(d.fillColour);
+						graphShape.fill(d.fillColour);
 					} else {
-						s.noFill();
+						graphShape.noFill();
 					}
 				}
-				s.endShape(PApplet.CLOSE); // fill in shape
+				graphShape.endShape(PApplet.CLOSE); // fill in shape
+				shapes.put(d, graphShape);
 			}
 		}
 
+		// Now draw graph shapes into canvas in reverse order
 		p.textAlign(PApplet.LEFT, PApplet.CENTER);
 		for (DataStream d : drawOrder) { // draw streams most recently added last (on bottom)
 			if (d.draw) {
@@ -352,7 +348,7 @@ public class ScrollMonitor extends ProcessingPane {
 					p.fill(0);
 				}
 				p.text(round(d.getRawData(d.length)) + d.dataUnit, position.x + dimensions.x + 10,
-						position.y + (dimensions.y - d.getDrawData(d.length - 1))); // y axis label
+						position.y + (dimensions.y - d.getDrawData(d.length - 1))); // y axis label (right side)
 			}
 		}
 
@@ -521,7 +517,7 @@ public class ScrollMonitor extends ProcessingPane {
 		canvas.strokeWeight(1); // guidelines
 
 		p.fill(0);
-		
+
 		if (bgSegmentsHorizontal > 0) {
 			p.textAlign(PApplet.RIGHT, PApplet.CENTER);
 			for (int i = 0; i < bgSegmentsHorizontal; i++) { // draw horizontal guidelines
@@ -536,8 +532,7 @@ public class ScrollMonitor extends ProcessingPane {
 		if (bgSegmentsVertical > 0) {
 			if (xAxisPosition == 0) {
 				p.textAlign(PApplet.CENTER, PApplet.BOTTOM);
-			}
-			else {
+			} else {
 				p.textAlign(PApplet.CENTER, PApplet.TOP);
 			}
 			float z = dataPoints / bgSegmentsVertical;
