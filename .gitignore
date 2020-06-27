@@ -1,4 +1,7 @@
 .DS_Store
+.classpath
+.project
+/.settings/
 applet
 application.linux-arm64
 application.linux-armv6hf

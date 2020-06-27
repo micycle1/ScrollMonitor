@@ -71,7 +71,7 @@ final class DataStream implements Comparable<DataStream> {
 	int direction = 1; // 1 scroll to left; -1 scroll to right
 	PVector drawDimensions; // used to scale raw data for draw data
 	String dataUnit = ""; // optional data label for axis values
-	
+
 	float maxLiveValue; // current maximum value, used for datastream dynamically y axis
 
 	float[] drawDataCache; // returns this when paused
@@ -99,7 +99,7 @@ final class DataStream implements Comparable<DataStream> {
 
 		data = new float[length];
 		Arrays.fill(data, -1); // init to -1 so not drawn by stroke
-		
+
 		drawData = new float[length];
 
 		fillColour = -1232323; // p.color(50, 50, 130, 150);
@@ -109,7 +109,7 @@ final class DataStream implements Comparable<DataStream> {
 		outline = true;
 		this.drawDimensions = drawDimensions;
 	}
-	
+
 	public DataStream(String name, int history, PVector drawDimensions, int smoothing) {
 		this(name, history, drawDimensions);
 		this.smoothing = smoothing;
@@ -117,6 +117,7 @@ final class DataStream implements Comparable<DataStream> {
 
 	/**
 	 * Pushes data to the datastream.
+	 * 
 	 * @param datum
 	 */
 	void push(float datum) {
@@ -125,7 +126,7 @@ final class DataStream implements Comparable<DataStream> {
 		pointer++; // inc pointer
 		pointer %= (length);
 	}
-	
+
 	void pushEmpty() {
 		push(-1); // TODO
 	}
@@ -149,15 +150,16 @@ final class DataStream implements Comparable<DataStream> {
 			drawData[i] = constrain(data[i], -1, maxValue - 1) * (drawDimensions.y / maxValue); // -1 because of stroke
 		}
 	}
-	
+
 	void recalcDrawData() {
 		for (int i = 0; i < data.length; i++) {
 			calcDrawData(i);
 		}
 	}
-	
+
 	/**
-	 * Calculates draw data for at the current pointer, taking into account smoothing.
+	 * Calculates draw data for at the current pointer, taking into account
+	 * smoothing.
 	 */
 	private void calcDrawData(int pointer) {
 		float drawDatum = data[pointer]; // sum of moving average
@@ -166,7 +168,7 @@ final class DataStream implements Comparable<DataStream> {
 			drawDatum += data[newPointer]; // sum moving average
 		}
 		drawDatum /= (smoothing + 1); // divide to get average
-		
+
 		// constrain & scale (-1 is stroke Weight)
 		drawData[Math.floorMod(pointer - 1, length)] = constrain(drawDatum, 0, maxValue - 1) * (drawDimensions.y / maxValue);
 	}
@@ -180,7 +182,7 @@ final class DataStream implements Comparable<DataStream> {
 	 */
 	float getDrawData(int index) {
 		if (paused) {
-			// -1, because pointer is incremented after push 
+			// -1, because pointer is incremented after push
 			int i = Math.floorMod(pointerCache + index - 1, length);
 			return drawDataCache[i];
 		} else {
@@ -200,8 +202,7 @@ final class DataStream implements Comparable<DataStream> {
 		if (paused) {
 			int i = Math.floorMod(pointerCache - 1 + index - length, length);
 			return rawDataCache[i];
-		}
-		else {
+		} else {
 			int i = Math.floorMod(pointer - 1 + index - length, length);
 			return data[i];
 		}

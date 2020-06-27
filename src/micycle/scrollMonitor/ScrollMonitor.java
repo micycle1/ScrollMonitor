@@ -47,7 +47,7 @@ public class ScrollMonitor extends ProcessingPane {
 	private float yAxisMax = 200; // Y-axis maximum value (ceiling)
 	private int dataPoints = 300; // or x axis TODO remove from datastream
 
-	private float xAxisPosition = 0; // top or bottom of graph
+	private float xAxisPosition; // top (0) or bottom (1) of graph
 
 	private int bgSegmentsHorizontal = 4;
 	private int bgSegmentsVertical = 4;
@@ -59,6 +59,7 @@ public class ScrollMonitor extends ProcessingPane {
 		streams = new LinkedHashMap<>();
 		drawOrder = new LinkedList<>();
 		yAxisMax = yAxis;
+		setXAxisPosition(0);
 	}
 
 	/**
@@ -109,28 +110,27 @@ public class ScrollMonitor extends ProcessingPane {
 
 	/**
 	 * Sets the level of visual smoothing a stream has using a equal-weighted moving
-	 * average of the last 'smoothing' terms.
-	 * This method is in contrast to {@link #setDrawSmoothing(int)}, which skips
-	 * drawing every point; this method does not affect how points are drawn
-	 * visually, but affects point data.
+	 * average of the last 'smoothing' terms. This method is in contrast to
+	 * {@link #setDrawSmoothing(int)}, which skips drawing every point; this method
+	 * does not affect how points are drawn visually, but affects point data.
 	 * 
 	 * @param dataStreamName
 	 * @param smoothing      default = 0 == no smoothing; must be >=1
 	 */
-	public void setStreamSmoothing(String dataStream, int smoothing) {
+	public void setStreamDataSmoothing(String dataStream, int smoothing) {
 		if (streams.containsKey(dataStream)) {
 			streams.get(dataStream).setSmoothing(smoothing);
 		} else {
 			System.err.println("The data stream " + dataStream + " is not present.");
 		}
 	}
-	
+
 	/**
 	 * 
 	 * @param smoothing
-	 * @see #setStreamSmoothing(String, int)
+	 * @see #setStreamDataSmoothing(String, int)
 	 */
-	public void setSmoothing(int smoothing) {
+	public void setDataSmoothing(int smoothing) {
 		averageSmoothingLevel = constrain(smoothing, 0, dataPoints);
 		streams.values().forEach(dataStream -> dataStream.setSmoothing(averageSmoothingLevel));
 	}
@@ -309,7 +309,7 @@ public class ScrollMonitor extends ProcessingPane {
 		for (Iterator<DataStream> drawOrderReverse = drawOrder.descendingIterator(); drawOrderReverse.hasNext();) {
 			DataStream d = drawOrderReverse.next();
 			if (d.draw) {
-				canvas.fill(d.fillColour); // A workaround for OPENGL modes since shape.fill() doesn't work 
+				canvas.fill(d.fillColour); // A workaround for OPENGL modes since shape.fill() doesn't work
 				PShape graphShape = canvas.createShape();
 				graphShape.setStrokeWeight(graphStrokeWeight);
 				graphShape.beginShape(); // BEGIN GRAPH PSHAPE
@@ -330,7 +330,7 @@ public class ScrollMonitor extends ProcessingPane {
 					vertY = (dimensions.y) - val;
 					graphShape.vertex(vertX, vertY);
 				}
-				
+
 				// draw out of bounds to hide stroke
 				graphShape.vertex(dimensions.x + graphStrokeWeight, (dimensions.y) - d.getDrawData(d.length - 1));
 				graphShape.vertex(dimensions.x + graphStrokeWeight, dimensions.y + graphStrokeWeight); // LR corner
@@ -404,6 +404,9 @@ public class ScrollMonitor extends ProcessingPane {
 			d.drawDimensions = dimensions.copy();
 			d.setMaxValue(d.maxValue);
 			d.recalcDrawData();
+		}
+		if (xAxisPosition != 0) {
+			xAxisPosition = dimensions.y + 2 * (2 + monitorBorderWeight); // recalc x-axis height
 		}
 	}
 
@@ -536,7 +539,7 @@ public class ScrollMonitor extends ProcessingPane {
 		} else {
 			canvas.rect(0, 0, dimensions.x, dimensions.y);
 		}
-		
+
 		canvas.stroke(0, 150); // guidelines
 		canvas.strokeWeight(1); // guidelines
 

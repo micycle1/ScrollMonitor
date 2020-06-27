@@ -88,7 +88,7 @@ abstract class ProcessingPane {
 
 		this.position = position;
 		this.dimensions = dimensions;
-		
+
 		mouseResizeBuffer = new PVector(20, 20);
 		minimumDimensions = new PVector(150, 100);
 
@@ -183,7 +183,8 @@ abstract class ProcessingPane {
 			}
 		} else {
 			if (pmouseOverPane) {
-				// change only once on mouse exit so multiple panes don't reset cursor for others
+				// change only once on mouse exit so multiple panes don't reset cursor for
+				// others
 				p.cursor(PApplet.ARROW);
 			}
 		}
@@ -214,6 +215,30 @@ abstract class ProcessingPane {
 	 * Called when mouse is over pane (within move region, not border)
 	 */
 	void mouseOver() {
+	}
+
+	final void lockPosition() {
+		lockPosition = true;
+	}
+
+	final void unlockPosition() {
+		lockPosition = false;
+	}
+
+	final void lockDimensions() {
+		lockDimensions = true;
+	}
+
+	final void unlockDimensions() {
+		lockDimensions = false;
+	}
+
+	final void showBorder() {
+		drawBorder = true;
+	}
+
+	final void hideBorder() {
+		drawBorder = false;
 	}
 
 	private final void resizeInternal() {
@@ -256,31 +281,7 @@ abstract class ProcessingPane {
 		resize();
 	}
 
-	final void lockPosition() {
-		lockPosition = true;
-	}
-
-	final void unlockPosition() {
-		lockPosition = false;
-	}
-
-	final void lockDimensions() {
-		lockDimensions = true;
-	}
-
-	final void unlockDimensions() {
-		lockDimensions = false;
-	}
-
-	final void showBorder() {
-		drawBorder = true;
-	}
-
-	final void hideBorder() {
-		drawBorder = false;
-	}
-
-	private void calcSidesMouseOver() {
+	private final void calcSidesMouseOver() {
 		resizeSides[0] = withinRegion(mousePos, position, PVector.add(position, new PVector(mouseResizeBuffer.x, dimensions.y))); // L
 		resizeSides[1] = withinRegion(mousePos, position,
 				PVector.add(position, new PVector(dimensions.x + mouseResizeBuffer.x, mouseResizeBuffer.y))); // U
@@ -293,7 +294,7 @@ abstract class ProcessingPane {
 	/**
 	 * Sets correct edge cursor when parent PApplet is in FX2D rendering mode.
 	 */
-	private void setFX2DCursor() {
+	private final void setFX2DCursor() {
 		// L,U,D,R
 		if (resizeSides[0]) { // LEFT SIDE
 			if (resizeSides[1]) { // NW
@@ -324,7 +325,7 @@ abstract class ProcessingPane {
 	 * Sets correct edge cursor when parent PApplet is in JAVA2D (default) rendering
 	 * mode.
 	 */
-	private void setAWTCursor() {
+	private final void setAWTCursor() {
 		if (resizeSides[0]) { // LEFT SIDE
 			if (resizeSides[1]) { // NW
 				canvasAWT.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.NW_RESIZE_CURSOR));
@@ -501,7 +502,7 @@ abstract class ProcessingPane {
 	 * @param BR    Corner two of region (different X & Y).
 	 * @return True if point contained in region.
 	 */
-	private static boolean withinRegion(PVector point, PVector UL, PVector BR) {
+	private static final boolean withinRegion(PVector point, PVector UL, PVector BR) {
 		return (point.x >= UL.x && point.y >= UL.y) && (point.x <= BR.x && point.y <= BR.y) // SE
 				|| (point.x >= BR.x && point.y >= BR.y) && (point.x <= UL.x && point.y <= UL.y) // NW
 				|| (point.x <= UL.x && point.x >= BR.x) && (point.y >= UL.y && point.y <= BR.y) // SW
