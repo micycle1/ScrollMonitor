@@ -1,7 +1,6 @@
 package micycle.scrollMonitor;
 
 import static processing.core.PApplet.constrain;
-import static processing.core.PApplet.max;
 import static processing.core.PApplet.round;
 
 import java.util.HashMap;
@@ -16,12 +15,17 @@ import processing.core.PVector;
 import processing.event.KeyEvent;
 
 /**
+ * A ScrollMonitor plots realtime data from any number of data sources (referred
+ * to as datastreams). To use, first define a datastream using
+ * {@link #addDataStream(String, int) addDataStream()} and then
+ * {@link #push(String, float) push} data to that datastream. A scrollmonitor
+ * steps once per frame.
+ * 
+ * 
+ * <p>
  * TODO: datastream defines how many datapoints are visible from each stream
  * (global) or per-stream?{@link #addDataStream(String, int)}
- * 
- * TODO thread drawing, begin drawing when push called, then draw to papplet in
- * post().
- * 
+ *
  * TODO scroll wheel zoom x-axis; shft+scroll+mouseover zoom y-axis
  * 
  * TODO option to scroll if data not pushed (per time, or per frame) by adding
@@ -36,10 +40,9 @@ public class ScrollMonitor extends ProcessingPane {
 	private LinkedList<DataStream> drawOrder; // most recent first (draw back to front)
 
 	private boolean pause = false;
-	private int pauseFrameCount = 0; // used to pause BG scrolling
+	private int pauseTime = 0; // used to pause BG scrolling
 
-	private int graphStrokeWeight = 5; // TODO (define per datastream?), "dynamic" option = maxVal+10%?
-	private int monitorBorderWeight = 2; // TODO
+	private int graphStrokeWeight = 5;
 
 	private int drawSmoothingLevel = 1;
 	private int averageSmoothingLevel = 0;
@@ -54,24 +57,28 @@ public class ScrollMonitor extends ProcessingPane {
 
 	private int backgroundColour = -934570246; // default colour
 
-	public ScrollMonitor(PApplet p, PVector position, PVector dimensions, int yAxis) {
+	private int time = 0;
+	private int timeStep = 1;
+
+	public ScrollMonitor(PApplet p, PVector position, PVector dimensions, int history, int yAxis) {
 		super(p, position, dimensions);
 		streams = new LinkedHashMap<>();
 		drawOrder = new LinkedList<>();
+		dataPoints = history;
 		yAxisMax = yAxis;
 		setXAxisPosition(0);
 	}
 
 	/**
 	 * Creates a new datastream within the monitor and assigns it a name. Use this
-	 * name in to refer to that stream in other methods.
+	 * name as an identifier to refer to the stream in other methods.
 	 * 
 	 * @param name       name/id reference
 	 * @param historyCap how many datapoints the stream will display
 	 */
-	public void addDataStream(String name, int historyCap) {
+	public void addDataStream(String name) {
 		if (!streams.containsKey(name)) { // enfore unique name
-			streams.put(name, new DataStream(name, historyCap, dimensions.copy(), averageSmoothingLevel));
+			streams.put(name, new DataStream(name, dataPoints, dimensions.copy(), averageSmoothingLevel));
 			drawOrder.offerFirst(streams.get(name)); // add to front of queue
 			streams.get(name).setMaxValue(yAxisMax); // set draw max value
 		} else {
@@ -80,7 +87,7 @@ public class ScrollMonitor extends ProcessingPane {
 	}
 
 	/**
-	 * Removes a given datastream, given by its name, from the monitor.
+	 * Removes a given datastream, identified by its name, from the monitor.
 	 * 
 	 * @param name
 	 */
@@ -91,18 +98,37 @@ public class ScrollMonitor extends ProcessingPane {
 		} else {
 			System.err.println("The data stream " + name + " is not present and cannot be removed.");
 		}
-
 	}
 
 	/**
-	 * Pushes data to a given datastream, identified by its name.
+	 * Pushes a datum (single data point) to a given datastream, identified by its
+	 * name.
 	 * 
 	 * @param dataStreamName
-	 * @param n              data
+	 * @param datum          data
+	 * @see #push(String, float[])
 	 */
-	public void push(String dataStreamName, float n) {
+	public void push(String dataStreamName, float datum) {
 		if (streams.containsKey(dataStreamName)) {
-			streams.get(dataStreamName).push(n);
+			streams.get(dataStreamName).push(datum);
+		} else {
+			System.err.println("The data stream " + dataStreamName + " is not present and cannot be pushed to.");
+		}
+	}
+
+	/**
+	 * Pushes multiple data points to a given datastream, identified by its name.
+	 * 
+	 * @param dataStreamName
+	 * @param data           an array (float[]) or varargs (float, float,
+	 *                       float......)
+	 * @see #push(String, float)
+	 */
+	public void push(String dataStreamName, float... data) {
+		if (streams.containsKey(dataStreamName)) {
+			for (float datum : data) {
+				streams.get(dataStreamName).push(datum);
+			}
 		} else {
 			System.err.println("The data stream " + dataStreamName + " is not present and cannot be pushed to.");
 		}
@@ -126,8 +152,9 @@ public class ScrollMonitor extends ProcessingPane {
 	}
 
 	/**
+	 * Sets the length of a moving average window. Use this to smooth noisy data.
 	 * 
-	 * @param smoothing
+	 * @param smoothing >=0. Default is 0 (no smoothing). Higher values
 	 * @see #setStreamDataSmoothing(String, int)
 	 */
 	public void setDataSmoothing(int smoothing) {
@@ -179,6 +206,16 @@ public class ScrollMonitor extends ProcessingPane {
 	}
 
 	/**
+	 * Sets the stroke (outline) colour for all graphs.
+	 * 
+	 * @param color ARGB colour represented by an integer; use Processing's color()
+	 *              method to generate values
+	 */
+	public void setStrokeColour(int color) {
+		streams.values().forEach(dataStream -> dataStream.strokeColour = color);
+	}
+
+	/**
 	 * Sets the stroke (outline) colour of a graph for a given data stream.
 	 * 
 	 * @param dataStream
@@ -191,6 +228,15 @@ public class ScrollMonitor extends ProcessingPane {
 		} else {
 			System.err.println("The data stream " + dataStream + " is not present.");
 		}
+	}
+
+	/**
+	 * Sets the stroke (outline) weight (thickness) for all datastream graphs.
+	 * 
+	 * @param weight outline thickness; >= 0
+	 */
+	public void setStrokeWeight(int weight) {
+		graphStrokeWeight = PApplet.max(0, weight);
 	}
 
 	/**
@@ -208,9 +254,12 @@ public class ScrollMonitor extends ProcessingPane {
 	 * ScrollMonitor should skip when drawing vertices in the graph for each data
 	 * stream. A value of 1 means every data point is drawn (default value); a value
 	 * of 2 means every other data point is drawn; a value of 3 means every third
-	 * data point is drawn, and so on... Higher values result in a smoother line but
-	 * may introduce visual stuttering as the graph scrolls. This value does not
-	 * affect the underlying data, only how each graph is drawn.
+	 * data point is drawn, and so on...
+	 * 
+	 * <p>
+	 * Higher values result in a smoother line but may introduce visual stuttering
+	 * as the graph scrolls. This value does not affect the underlying data, only
+	 * how each graph is drawn.
 	 * 
 	 * @param level A value of 1 (default, no smoothing) or 2 is recommended.
 	 */
@@ -222,6 +271,13 @@ public class ScrollMonitor extends ProcessingPane {
 		}
 	}
 
+	/**
+	 * Sets the data unit for a stream, given by its name. This unit is appended to
+	 * the
+	 * 
+	 * @param dataStream
+	 * @param unit       e.g. "FPS"
+	 */
 	public void setStreamUnit(String dataStream, String unit) {
 		if (streams.containsKey(dataStream)) {
 			streams.get(dataStream).dataUnit = unit;
@@ -243,7 +299,7 @@ public class ScrollMonitor extends ProcessingPane {
 			return;
 		}
 		if (position == PConstants.BOTTOM || position == 0) {
-			xAxisPosition = dimensions.y + 2 * (2 + monitorBorderWeight);
+			xAxisPosition = dimensions.y + 2 * (2 + borderStrokeWeight);
 			return;
 		}
 		System.err.println("An X-axis position value of " + position + " is not valid.");
@@ -289,6 +345,32 @@ public class ScrollMonitor extends ProcessingPane {
 		} else {
 			System.err.println("The data stream " + dataStream + " is not present.");
 		}
+	}
+
+	/**
+	 * Defines how many units (on the x-axis) the background should step every time
+	 * {@link #run()} is called. By default, and will thereby match the parent PApplet framecount. 
+	 * 
+	 * @param timeStep >=0; default = 1
+	 * @see #stepTimeManually(int)
+	 */
+	public void setTimeStep(int timeStep) {
+		this.timeStep = timeStep;
+	}
+
+
+	/**
+	 * Steps the time (x-axis units) forward by a given amount.
+	 * 
+	 * <p> By default, a ScrollMonitor steps by current value of timeStep every time
+	 * run() is called. This method, handy if you are pushing values to the
+	 * ScrollMonitor sparingly (in conjunction with timeStep being set to 0).
+	 * 
+	 * @param units
+	 * @see #setTimeStep(int)
+	 */
+	public void stepTimeManually(int units) {
+		time += units;
 	}
 
 	@Override
@@ -358,7 +440,7 @@ public class ScrollMonitor extends ProcessingPane {
 			if (d.draw) {
 				canvas.shape(shapes.get(d));
 				if (d == mouseOverStream) {
-					p.fill(0, 255, 0); // TODO colour
+					p.fill(0, 155, 0);
 				} else {
 					p.fill(0);
 				}
@@ -376,7 +458,7 @@ public class ScrollMonitor extends ProcessingPane {
 			float valAtMouseDrawLength = mouseOverStream.getDrawData(mouseOverIndex);
 
 			canvas.stroke(mouseOverStream.strokeColour);
-			canvas.strokeWeight(max(1, graphStrokeWeight - 0));
+			canvas.strokeWeight(2);
 			canvas.line(x, dimensions.y, x, dimensions.y - valAtMouseDrawLength + 1); // vertical line where mouse is
 
 			canvas.textAlign(PApplet.CENTER, PApplet.CENTER);
@@ -392,10 +474,7 @@ public class ScrollMonitor extends ProcessingPane {
 
 	@Override
 	void post() {
-		p.noFill();
-		p.strokeWeight(monitorBorderWeight * 2);
-		p.rect(position.x - monitorBorderWeight, position.y - monitorBorderWeight, dimensions.x + 2 * monitorBorderWeight - 1,
-				dimensions.y + 2 * monitorBorderWeight - 1);
+		time += timeStep;
 	}
 
 	@Override
@@ -406,7 +485,7 @@ public class ScrollMonitor extends ProcessingPane {
 			d.recalcDrawData();
 		}
 		if (xAxisPosition != 0) {
-			xAxisPosition = dimensions.y + 2 * (2 + monitorBorderWeight); // recalc x-axis height
+			xAxisPosition = dimensions.y + 2 * (2 + borderStrokeWeight); // recalc x-axis height
 		}
 	}
 
@@ -419,18 +498,34 @@ public class ScrollMonitor extends ProcessingPane {
 
 	@Override
 	void mouseOver() {
-		p.cursor(PApplet.MOVE); // over monitor but not over any graph
+		p.cursor(PApplet.MOVE); // cursor when mouse is over a monitor but not over any graph
+	}
+
+	@Override
+	void keyReleased(KeyEvent e) {
+		switch (e.getKeyCode()) {
+			case PConstants.TAB : // TODO?
+				if (pause) {
+					unPause();
+				} else {
+					pause();
+				}
+				break;
+			default :
+				break;
+		}
 	}
 
 	/**
-	 * Pauses the view (data pushing is not blocked). [all]
+	 * Pauses the view (data pushing is not blocked) for all datastreams.
 	 * 
 	 * @see #unPause()
+	 * @see #togglePause()
 	 */
 	public void pause() {
 		if (!pause) {
 			pause = true;
-			pauseFrameCount = p.frameCount;
+			pauseTime = time;
 			for (DataStream d : streams.values()) {
 				d.pause();
 			}
@@ -438,7 +533,10 @@ public class ScrollMonitor extends ProcessingPane {
 	}
 
 	/**
-	 * Pauses the view (data pushing is not blocked).
+	 * Resumes graph scrolling for all datastreams.
+	 * 
+	 * @see #pause
+	 * @see #togglePause()
 	 */
 	public void unPause() {
 		if (pause) {
@@ -447,6 +545,18 @@ public class ScrollMonitor extends ProcessingPane {
 				d.resume();
 			}
 		}
+	}
+
+	/**
+	 * (Un)pause the view (data pushing is not blocked).
+	 * 
+	 * @see #pause()
+	 * @see #unPause()
+	 */
+	public void togglePause() {
+		pause = !pause;
+		pause();
+		unPause();
 	}
 
 	/**
@@ -478,6 +588,7 @@ public class ScrollMonitor extends ProcessingPane {
 	 * recieve any data pushed to it).
 	 * 
 	 * @param dataStream data stream to hide, given by its name identifier
+	 * @see #showDatastream(String)
 	 */
 	public void hideDatastream(String dataStream) {
 		if (streams.containsKey(dataStream)) {
@@ -487,38 +598,17 @@ public class ScrollMonitor extends ProcessingPane {
 		}
 	}
 
+	/**
+	 * Shows a datastream that has been {@link #hideDatastream(String) hidden}.
+	 * 
+	 * @param dataStream data stream to show, given by its name identifier
+	 * @see #hideDatastream(String)
+	 */
 	public void showDatastream(String dataStream) {
 		if (streams.containsKey(dataStream)) {
 			streams.get(dataStream).draw = true;
 		} else {
 			System.err.println("The data stream " + dataStream + " is not present.");
-		}
-	}
-
-	/**
-	 * Pause the view (data pushing is not blocked).
-	 * 
-	 * @see #pause()
-	 * @see #unPause()
-	 */
-	public void togglePause() {
-		pause = !pause;
-		pause();
-		unPause();
-	}
-
-	@Override
-	void keyReleased(KeyEvent e) {
-		switch (e.getKeyCode()) {
-			case PConstants.TAB :
-				if (pause) {
-					unPause();
-				} else {
-					pause();
-				}
-				break;
-			default :
-				break;
 		}
 	}
 
@@ -564,11 +654,12 @@ public class ScrollMonitor extends ProcessingPane {
 			}
 			float z = dataPoints / bgSegmentsVertical;
 			for (int i = 0; i < bgSegmentsVertical; i++) { // draw vertical guidelines
-				float xPos = Math.floorMod((int) ((i * (dimensions.x / bgSegmentsVertical)
-						- ((pause ? pauseFrameCount : p.frameCount) * dimensions.x / dataPoints))), (int) dimensions.x);
+				float xPos = Math.floorMod(
+						(int) ((i * (dimensions.x / bgSegmentsVertical) - ((pause ? pauseTime : time) * dimensions.x / dataPoints))),
+						(int) dimensions.x);
 				canvas.line(xPos, 0, xPos, dimensions.y);
-				p.text((int) (p.frameCount - ((p.frameCount % dataPoints)) + (z * i)), position.x + xPos,
-						position.y - 2 - monitorBorderWeight + xAxisPosition); // draw x-axis labels
+				p.text((int) (time - ((time % dataPoints)) + (z * i)), position.x + xPos,
+						position.y - 2 - borderStrokeWeight + xAxisPosition); // draw x-axis labels
 			}
 		}
 	}

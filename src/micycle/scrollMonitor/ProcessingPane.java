@@ -39,9 +39,11 @@ abstract class ProcessingPane {
 	 * Tracks from which side(s) the monitor is being resized.
 	 */
 	private boolean[] resizeSides = new boolean[4]; // L,U,D,R
-	boolean dragging = false, resizing = false; // Also exposed in method callbacks
+	boolean dragging = false, resizing = false; // Also exposed via method callbacks
 
-	private boolean drawBorder = false;
+	boolean drawBorder = false;
+	int borderStrokeColor = 0;
+	int borderStrokeWeight = 3;
 
 	/**
 	 * Rendering mode of parent PApplet (used when resizing to change mouse cursor)
@@ -131,9 +133,12 @@ abstract class ProcessingPane {
 		canvas.endDraw();
 		p.image(canvas, position.x, position.y);
 		if (drawBorder) {
-			p.noFill();
-			p.stroke(0);
-			p.rect(position.x, position.y, dimensions.x, dimensions.y);
+			p.stroke(borderStrokeColor);
+			p.strokeWeight(borderStrokeWeight);
+			p.line(position.x, position.y, position.x, position.y + dimensions.y);
+			p.line(position.x + dimensions.x, position.y, position.x + dimensions.x, position.y + dimensions.y);
+			p.line(position.x, position.y + dimensions.y, position.x + dimensions.x, position.y + dimensions.y);
+			p.line(position.x, position.y, position.x + dimensions.x, position.y);
 		}
 		post();
 	}
@@ -233,12 +238,20 @@ abstract class ProcessingPane {
 		lockDimensions = false;
 	}
 
-	final void showBorder() {
+	public final void showBorder() {
 		drawBorder = true;
 	}
 
-	final void hideBorder() {
+	public final void hideBorder() {
 		drawBorder = false;
+	}
+	
+	public final void setBorderStrokeWeight(int weight) {
+		borderStrokeWeight = max(0, weight);
+	}
+	
+	public final void setBorderStrokeColor(int color) {
+		borderStrokeColor = color;
 	}
 
 	private final void resizeInternal() {

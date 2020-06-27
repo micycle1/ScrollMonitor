@@ -11,18 +11,11 @@ import processing.core.PVector;
  * does not draw the data itself, this is left to scrollmonitor. Supports
  * smoothing in the form of a moving average.
  * 
- * TODO dynamic ordering / opacity based on mouse-over/highest value TODO max
- * datapoint/history size (purged thereafter) & viewable datapoints,
- * 
  * @author micycle1
  *
  */
-final class DataStream implements Comparable<DataStream> {
+final class DataStream {
 
-	/**
-	 * Position in queue
-	 */
-	int queueIndex; // TODO remove / move to #ScrollMonitor)
 	/**
 	 * DataStream name (identifier)
 	 */
@@ -128,7 +121,7 @@ final class DataStream implements Comparable<DataStream> {
 	}
 
 	void pushEmpty() {
-		push(-1); // TODO
+		push(Float.NEGATIVE_INFINITY); // TODO
 	}
 
 	/**
@@ -163,11 +156,17 @@ final class DataStream implements Comparable<DataStream> {
 	 */
 	private void calcDrawData(int pointer) {
 		float drawDatum = data[pointer]; // sum of moving average
+		int skippedDataPoints = 0; // number of "empty" points skipped in average calculation
 		for (int i = 0; i < smoothing; i++) { // calc moving average
 			int newPointer = Math.floorMod(pointer - 1 - i, length); // pointer to previous data
-			drawDatum += data[newPointer]; // sum moving average
+			if (data[newPointer] != Float.NEGATIVE_INFINITY) {
+				drawDatum += data[newPointer]; // sum moving average
+			}
+			else {
+				skippedDataPoints++;
+			}
 		}
-		drawDatum /= (smoothing + 1); // divide to get average
+		drawDatum /= (smoothing + 1 - skippedDataPoints); // divide to get average
 
 		// constrain & scale (-1 is stroke Weight)
 		drawData[Math.floorMod(pointer - 1, length)] = constrain(drawDatum, 0, maxValue - 1) * (drawDimensions.y / maxValue);
@@ -219,19 +218,5 @@ final class DataStream implements Comparable<DataStream> {
 		paused = false;
 		drawDataCache = null; // release memory
 		rawDataCache = null; // release memory
-	}
-
-	/**
-	 * Used to determine iteration order TODO use value of last datapoint to
-	 * determine order?
-	 */
-	@Override
-	public int compareTo(DataStream d) {
-		if (queueIndex > d.queueIndex)
-			return 1;
-		else if (queueIndex == d.queueIndex) {
-			return 0;
-		}
-		return -1;
 	}
 }
