@@ -7,15 +7,12 @@ import java.util.Arrays;
 import processing.core.PVector;
 
 /**
- * Encapsulates Container for data, index, queue position, draw-data etc.
- * Supports smoothing in the form of a moving average. To this end, the length
- * of the data array must be of size= size+smoothingSize so the first data item
- * we want to see can be smoothed, rather than skipping the first smoothingSize
- * items. TODO dynamic ordering / opacity based on mouse-over/highest value TODO
- * max datapoint/history size (purged thereafter) & viewable datapoints,
+ * A container for data, index, queue position, draw-data, etc. A DataStream
+ * does not draw the data itself, this is left to scrollmonitor. Supports
+ * smoothing in the form of a moving average.
  * 
- * does not draw the data itself, this is left to scrollmonitor; provides the
- * data only.
+ * TODO dynamic ordering / opacity based on mouse-over/highest value TODO max
+ * datapoint/history size (purged thereafter) & viewable datapoints,
  * 
  * @author micycle1
  *
@@ -100,88 +97,82 @@ final class DataStream implements Comparable<DataStream> {
 		smoothing = 0;
 		pointer = 0;
 
-		data = new float[length + smoothing];
+		data = new float[length];
 		Arrays.fill(data, -1); // init to -1 so not drawn by stroke
+		
+		drawData = new float[length];
 
-		data[0] = -1.987654f; // mark for inital smoothing history generation
 		fillColour = -1232323; // p.color(50, 50, 130, 150);
 		strokeColour = -12389127; // p.color(255, 80, 180, 100);
-
-		drawData = new float[length];
-		Arrays.fill(drawData, -1); // init to -1 so not drawn by stroke
 
 		fill = true;
 		outline = true;
 		this.drawDimensions = drawDimensions;
 	}
-
-	/**
-	 * varargs
-	 * 
-	 * @param datum datapoints
-	 */
-	void push(float datum) {
-
-		// on the first data point, generate moving average data, and append data to end
-		// of the array
-		// because the pointer starts at 0, so will it look backwards (wrap around to
-		// the end of the array) for history
-		if (pointer == 0 && data[0] == -1.987654f) {
-			for (int i = 0; i < smoothing; i++) {
-				data[length + smoothing - i] = datum;
-			}
-		}
-
-		data[pointer] = datum; // push raw datum
-
-		float drawData = datum; // sum of moving average
-		for (int i = 0; i < smoothing; i++) { // calc moving average
-			int newPointer = Math.floorMod(pointer - 1 - i, length + smoothing); // pointer to previous data, can
-																					// wrap around
-			drawData += data[newPointer]; // sum moving average
-		}
-		drawData /= (smoothing + 1); // divide to get average
-
-		this.drawData[Math.floorMod(pointer - smoothing - 1, length + smoothing)] = constrain(drawData, 0, maxValue - 1)
-				* (drawDimensions.y / maxValue); // constrain & scale (-1 is stroke Weight)
-
-		pointer++; // inc pointer
-		// pointer = ((pointer % length) + smoothing) % (length + smoothing); // recalc
-		// pointer (offset to active part of data array)
-		pointer %= (length + smoothing);
+	
+	public DataStream(String name, int history, PVector drawDimensions, int smoothing) {
+		this(name, history, drawDimensions);
+		this.smoothing = smoothing;
 	}
 
+	/**
+	 * Pushes data to the datastream.
+	 * @param datum
+	 */
+	void push(float datum) {
+		data[pointer] = datum; // push raw datum
+		calcDrawData(pointer);
+		pointer++; // inc pointer
+		pointer %= (length);
+	}
+	
 	void pushEmpty() {
 		push(-1); // TODO
 	}
 
 	/**
-	 * Set new smoothing level
+	 * Sets a new smoothing level
 	 * 
 	 * @param smoothing
 	 */
 	void setSmoothing(int smoothing) {
-		smoothing = constrain(smoothing, 0, length); // floor & ceiling
+		smoothing = constrain(smoothing, 0, length); // floor & ceiling TODO remove
 		if (this.smoothing != smoothing) { // perform if different | TODO fix with smoothing data
-			float[] tempData = new float[length + smoothing]; // create new buffer
-			System.arraycopy(data, this.smoothing, tempData, smoothing, length); // copy into new buffer
-			data = tempData; // replace data with new buffer
-			this.smoothing = smoothing; // set new smoothing level
-
-			// TODO recalc drawData
+			this.smoothing = smoothing;
+			recalcDrawData();
 		}
 	}
 
 	void setMaxValue(float maxValue) {
 		this.maxValue = maxValue;
-		// TODO recalc drawvalues w/ smoothing when changed
 		for (int i = 0; i < drawData.length; i++) {
 			drawData[i] = constrain(data[i], -1, maxValue - 1) * (drawDimensions.y / maxValue); // -1 because of stroke
 		}
 	}
+	
+	void recalcDrawData() {
+		for (int i = 0; i < data.length; i++) {
+			calcDrawData(i);
+		}
+	}
+	
+	/**
+	 * Calculates draw data for at the current pointer, taking into account smoothing.
+	 */
+	private void calcDrawData(int pointer) {
+		float drawDatum = data[pointer]; // sum of moving average
+		for (int i = 0; i < smoothing; i++) { // calc moving average
+			int newPointer = Math.floorMod(pointer - 1 - i, length); // pointer to previous data
+			drawDatum += data[newPointer]; // sum moving average
+		}
+		drawDatum /= (smoothing + 1); // divide to get average
+		
+		// constrain & scale (-1 is stroke Weight)
+		drawData[Math.floorMod(pointer - 1, length)] = constrain(drawDatum, 0, maxValue - 1) * (drawDimensions.y / maxValue);
+	}
 
 	/**
-	 * Get draw data that is logically at the index given (where 0 is left most
+	 * Gets draw data that is logically at the index given (where 0 is left most
 	 * datapoint) or, ordered by recency, where 0 is oldest data point
 	 * 
 	 * @param index
@@ -189,18 +180,17 @@ final class DataStream implements Comparable<DataStream> {
 	 */
 	float getDrawData(int index) {
 		if (paused) {
-			int i = Math.floorMod(pointerCache + index - 1, length + smoothing); // -1, because pointer is incremented
-																					// after push
+			// -1, because pointer is incremented after push 
+			int i = Math.floorMod(pointerCache + index - 1, length);
 			return drawDataCache[i];
 		} else {
-			int i = Math.floorMod(pointer + index - 1, length + smoothing); // -1, because pointer is incremented after
-			// push
+			int i = Math.floorMod(pointer + index - 1, length);
 			return drawData[i];
 		}
 	}
 
 	/**
-	 * Get raw data (data pushed to stream) that is logically at the index given
+	 * Gets raw data (data pushed to stream) that is logically at the index given
 	 * (where 0 is left most datapoint)
 	 * 
 	 * @param index
@@ -208,11 +198,11 @@ final class DataStream implements Comparable<DataStream> {
 	 */
 	float getRawData(int index) {
 		if (paused) {
-			int i = Math.floorMod(pointerCache - 1 + index - length, length + smoothing);
+			int i = Math.floorMod(pointerCache - 1 + index - length, length);
 			return rawDataCache[i];
 		}
 		else {
-			int i = Math.floorMod(pointer - 1 + index - length, length + smoothing);
+			int i = Math.floorMod(pointer - 1 + index - length, length);
 			return data[i];
 		}
 	}

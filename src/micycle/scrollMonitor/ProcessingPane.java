@@ -9,6 +9,7 @@ import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 
 import processing.core.PApplet;
+import processing.core.PConstants;
 import processing.core.PGraphics;
 import processing.core.PVector;
 
@@ -29,8 +30,8 @@ import processing.event.MouseEvent;
  */
 abstract class ProcessingPane {
 
-	PApplet p; // Parent PApplet (exposed for sub-class)
-	PGraphics canvas; // Pane graphics (sub-class should draw into this)
+	final PApplet p; // Parent PApplet (exposed for sub-class)
+	final PGraphics canvas; // Pane graphics (sub-class should draw into this)
 	PVector position, dimensions;
 	PVector mousePos, mouseDownPos;
 
@@ -45,11 +46,11 @@ abstract class ProcessingPane {
 	/**
 	 * Rendering mode of parent PApplet (used when resizing to change mouse cursor)
 	 */
-	private enum RENDERERS {
+	enum RENDERERS {
 		JAVA2D, JAVAFX, JOGL
 	}
 
-	private final RENDERERS renderer;
+	final RENDERERS renderer;
 
 	private final PVector minimumDimensions; // Minimum pane resize dimensions
 
@@ -87,26 +88,34 @@ abstract class ProcessingPane {
 
 		this.position = position;
 		this.dimensions = dimensions;
-		canvas = p.createGraphics((int) dimensions.x, (int) dimensions.y);
-		canvas.smooth(4);
-
+		
 		mouseResizeBuffer = new PVector(20, 20);
 		minimumDimensions = new PVector(150, 100);
 
 		switch (p.sketchRenderer()) {
 			case "processing.javafx.PGraphicsFX2D" :
+				canvas = p.createGraphics((int) dimensions.x, (int) dimensions.y);
 				renderer = RENDERERS.JAVAFX;
 				pAppletFXscene = ((Canvas) p.getSurface().getNative()).getScene();
 				break;
 			case "processing.awt.PGraphicsJava2D" :
+				canvas = p.createGraphics((int) dimensions.x, (int) dimensions.y);
 				renderer = RENDERERS.JAVA2D;
 				canvasAWT = (java.awt.Canvas) ((PSurfaceAWT) p.getSurface()).getNative();
 				break;
 			case "processing.opengl.PGraphics3D" :
-			case "processing.opengl.PGraphics2D" :
-			default :
+				canvas = p.createGraphics((int) dimensions.x, (int) dimensions.y, PConstants.P3D);
 				renderer = RENDERERS.JOGL;
+				break;
+			case "processing.opengl.PGraphics2D" :
+				canvas = p.createGraphics((int) dimensions.x, (int) dimensions.y, PConstants.P2D);
+				renderer = RENDERERS.JOGL;
+				break;
+			default :
+				canvas = p.createGraphics((int) dimensions.x, (int) dimensions.y);
+				renderer = RENDERERS.JAVA2D;
 		}
+		canvas.smooth(4);
 
 		p.registerMethod("mouseEvent", this);
 		p.registerMethod("keyEvent", this);
@@ -243,7 +252,7 @@ abstract class ProcessingPane {
 		} else if (resizeSides[3]) { // →
 			dimensions.set(max(newDims2.x, minimumDimensions.x), dimensions.y);
 		}
-		canvas = p.createGraphics((int) dimensions.x, (int) dimensions.y);
+		canvas.setSize((int) dimensions.x, (int) dimensions.y);
 		resize();
 	}
 
