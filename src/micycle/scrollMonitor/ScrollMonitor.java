@@ -60,6 +60,12 @@ public class ScrollMonitor extends ProcessingPane {
 	private int time = 0;
 	private int timeStep = 1;
 
+	/**
+	 * The datastream, identified by name, that should be used to dynamically set
+	 * the Y-axis maximum.
+	 */
+	private String yAxisDataStream = null;
+
 	public ScrollMonitor(PApplet p, PVector position, PVector dimensions, int history, int yAxis) {
 		super(p, position, dimensions);
 		streams = new LinkedHashMap<>();
@@ -171,7 +177,8 @@ public class ScrollMonitor extends ProcessingPane {
 	 */
 	public void setMaxYAxisValue(float value) {
 		yAxisMax = value;
-		streams.values().forEach(stream -> stream.maxValue = value);
+		streams.values().forEach(stream -> stream.setMaxValue(yAxisMax));
+		yAxisDataStream = null; // disable dynamic y-axis
 	}
 
 	/**
@@ -183,8 +190,8 @@ public class ScrollMonitor extends ProcessingPane {
 	 * @see #setMaxYAxisValue(float)
 	 */
 	public void setDynamicYAxis(String dataStream) {
-		if (streams.containsKey(dataStream)) {
-			// TODO
+		if (streams.containsKey(dataStream) || dataStream == null) {
+			yAxisDataStream = dataStream;
 		} else {
 			System.err.println("The data stream " + dataStream + " is not present.");
 		}
@@ -349,7 +356,8 @@ public class ScrollMonitor extends ProcessingPane {
 
 	/**
 	 * Defines how many units (on the x-axis) the background should step every time
-	 * {@link #run()} is called. By default, and will thereby match the parent PApplet framecount. 
+	 * {@link #run()} is called. By default, and will thereby match the parent
+	 * PApplet framecount.
 	 * 
 	 * @param timeStep >=0; default = 1
 	 * @see #stepTimeManually(int)
@@ -358,11 +366,11 @@ public class ScrollMonitor extends ProcessingPane {
 		this.timeStep = timeStep;
 	}
 
-
 	/**
 	 * Steps the time (x-axis units) forward by a given amount.
 	 * 
-	 * <p> By default, a ScrollMonitor steps by current value of timeStep every time
+	 * <p>
+	 * By default, a ScrollMonitor steps by current value of timeStep every time
 	 * run() is called. This method, handy if you are pushing values to the
 	 * ScrollMonitor sparingly (in conjunction with timeStep being set to 0).
 	 * 
@@ -381,6 +389,23 @@ public class ScrollMonitor extends ProcessingPane {
 	void draw() {
 
 		canvas.clear();
+		
+		if (yAxisDataStream != null) {
+			if (streams.containsKey(yAxisDataStream)) { // check hasn't been removed by removeDataStream()
+				float yMax = Float.MIN_NORMAL;
+				DataStream d = streams.get(yAxisDataStream);
+				for (int i = 0; i < d.length; i++) { // TODO reference datapoints?
+					float data = streams.get(yAxisDataStream).getRawData(i);
+					yMax = data > yMax ? data : yMax; // set to max
+				}
+				if (yMax != yAxisMax) {
+					setMaxYAxisValue(PApplet.lerp(yAxisMax, yMax * 1.01f, 0.05f)); // set to +1% greater
+				}
+			}
+			else {
+				yAxisDataStream = null; // reset (datastream ID not present)
+			}
+		}
 
 		drawBG();
 
@@ -481,7 +506,7 @@ public class ScrollMonitor extends ProcessingPane {
 	void resize() {
 		for (DataStream d : streams.values()) {
 			d.drawDimensions = dimensions.copy();
-			d.setMaxValue(d.maxValue);
+//			d.setMaxValue(d.maxValue); // TODO
 			d.recalcDrawData();
 		}
 		if (xAxisPosition != 0) {

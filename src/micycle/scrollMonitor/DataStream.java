@@ -54,9 +54,9 @@ final class DataStream {
 	 */
 	boolean fill, outline;
 	/**
-	 * Ceiling value of data drawn (doesn't affect data pushed)
+	 * Ceiling value of data drawn (doesn't affect data pushed). Should be accessed via setMaxValue().
 	 */
-	float maxValue;
+	private float maxValue;
 	/**
 	 * Buffer/history size (size of {@link #data})
 	 */
