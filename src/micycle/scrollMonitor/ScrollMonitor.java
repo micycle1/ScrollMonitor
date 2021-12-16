@@ -31,7 +31,7 @@ import processing.event.KeyEvent;
  * TODO option to scroll if data not pushed (per time, or per frame) by adding
  * empty data
  * 
- * @author micycle1
+ * @author Michael Carleton
  *
  */
 public class ScrollMonitor extends ProcessingPane {
@@ -48,6 +48,7 @@ public class ScrollMonitor extends ProcessingPane {
 	private int averageSmoothingLevel = 0;
 
 	private float yAxisMax = 200; // Y-axis maximum value (ceiling)
+	// TODO y-axis visual min
 	private int dataPoints = 300; // or x axis TODO remove from datastream
 
 	private float xAxisPosition; // top (0) or bottom (1) of graph
@@ -389,7 +390,7 @@ public class ScrollMonitor extends ProcessingPane {
 	void draw() {
 
 		canvas.clear();
-		
+
 		if (yAxisDataStream != null) {
 			if (streams.containsKey(yAxisDataStream)) { // check hasn't been removed by removeDataStream()
 				float yMax = Float.MIN_NORMAL;
@@ -401,8 +402,7 @@ public class ScrollMonitor extends ProcessingPane {
 				if (yMax != yAxisMax) {
 					setMaxYAxisValue(PApplet.lerp(yAxisMax, yMax * 1.01f, 0.05f)); // set to +1% greater
 				}
-			}
-			else {
+			} else {
 				yAxisDataStream = null; // reset (datastream ID not present)
 			}
 		}

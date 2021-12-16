@@ -25,7 +25,7 @@ import processing.event.MouseEvent;
  * ProcessingPane has been developed in a *generic* manner for ScrollMonitor,
  * enabling easy use in any other unrelated projects.
  * 
- * @author micycle1
+ * @author Michael Carleton
  *
  */
 abstract class ProcessingPane {
@@ -245,11 +245,11 @@ abstract class ProcessingPane {
 	public final void hideBorder() {
 		drawBorder = false;
 	}
-	
+
 	public final void setBorderStrokeWeight(int weight) {
 		borderStrokeWeight = max(0, weight);
 	}
-	
+
 	public final void setBorderStrokeColor(int color) {
 		borderStrokeColor = color;
 	}

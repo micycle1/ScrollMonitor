@@ -11,7 +11,7 @@ import processing.core.PVector;
  * does not draw the data itself, this is left to scrollmonitor. Supports
  * smoothing in the form of a moving average.
  * 
- * @author micycle1
+ * @author Michael Carleton
  *
  */
 final class DataStream {
@@ -54,7 +54,8 @@ final class DataStream {
 	 */
 	boolean fill, outline;
 	/**
-	 * Ceiling value of data drawn (doesn't affect data pushed). Should be accessed via setMaxValue().
+	 * Ceiling value of data drawn (doesn't affect data pushed). Should be accessed
+	 * via setMaxValue().
 	 */
 	private float maxValue;
 	/**
@@ -161,8 +162,7 @@ final class DataStream {
 			int newPointer = Math.floorMod(pointer - 1 - i, length); // pointer to previous data
 			if (data[newPointer] != Float.NEGATIVE_INFINITY) {
 				drawDatum += data[newPointer]; // sum moving average
-			}
-			else {
+			} else {
 				skippedDataPoints++;
 			}
 		}

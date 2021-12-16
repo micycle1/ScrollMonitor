@@ -12,3 +12,4 @@ application.windows64
 application.macosx
 out
 /bin/
+/target/
