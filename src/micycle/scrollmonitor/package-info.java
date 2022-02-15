@@ -3,4 +3,4 @@
  * 
  * @author micycle1
  */
-package micycle.scrollMonitor;
+package micycle.scrollmonitor;

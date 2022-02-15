@@ -1,4 +1,4 @@
-package micycle.scrollMonitor;
+package micycle.scrollmonitor;
 
 import static processing.core.PApplet.constrain;
 

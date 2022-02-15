@@ -1,4 +1,4 @@
-package micycle.scrollMonitor;
+package micycle.scrollmonitor;
 
 import static processing.core.PApplet.constrain;
 import static processing.core.PApplet.max;
@@ -7,13 +7,11 @@ import static processing.core.PApplet.min;
 import javafx.scene.Cursor;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
-
+import processing.awt.PSurfaceAWT;
 import processing.core.PApplet;
 import processing.core.PConstants;
 import processing.core.PGraphics;
 import processing.core.PVector;
-
-import processing.awt.PSurfaceAWT;
 import processing.event.KeyEvent;
 import processing.event.MouseEvent;
 
@@ -21,7 +19,10 @@ import processing.event.MouseEvent;
  * A generic window pane to use for GUI windows/areas in Processing. A
  * ProcessingPane is ambivalent to the contents of its canvas (a PGraphics
  * object).
- * 
+ * <p>
+ * Concrete implementations (classes that extend ProcessingPane) should draw
+ * into the pane's {@link #canvas}: e.g. <code>canvas.rect(a,b,c,d);</code>.
+ * <p>
  * ProcessingPane has been developed in a *generic* manner for ScrollMonitor,
  * enabling easy use in any other unrelated projects.
  * 
@@ -30,10 +31,27 @@ import processing.event.MouseEvent;
  */
 abstract class ProcessingPane {
 
-	final PApplet p; // Parent PApplet (exposed for sub-class)
+	/**
+	 * Pane's parent PApplet.
+	 */
+	final PApplet p;
 	final PGraphics canvas; // Pane graphics (sub-class should draw into this)
-	PVector position, dimensions;
-	PVector mousePos, mouseDownPos;
+	/**
+	 * Coordinate of upper-left corner (origin) of the pane.
+	 */
+	PVector position;
+	/**
+	 * Width & height of the pane.
+	 */
+	PVector dimensions;
+	/**
+	 * Position of mouse within parent PApplet.
+	 */
+	PVector mousePos;
+	/**
+	 * Position of mouse when the mouse was last pressed.
+	 */
+	PVector mouseDownPos;
 
 	/**
 	 * Tracks from which side(s) the monitor is being resized.
@@ -76,7 +94,8 @@ abstract class ProcessingPane {
 	boolean mouseOverPane = false, pmouseOverPane = false;
 
 	/**
-	 * is mouse over the valid move region (smaller than {@link #mouseOverPane})
+	 * Whether mouse is over a valid move region (a region smaller than
+	 * {@link #mouseOverPane}).
 	 */
 	boolean withinMoveRegion = false;
 
@@ -85,6 +104,14 @@ abstract class ProcessingPane {
 	 */
 	private boolean lockPosition = false, lockDimensions = false;
 
+	/**
+	 * Creates a new pane, having a minimum dimension of (50, 50).
+	 * 
+	 * @param p          parent PApplet (pane will listen to mouse and key events
+	 *                   from this applet)
+	 * @param position   coordinate of upper-left corner (origin) of the pane
+	 * @param dimensions width and height of the pane
+	 */
 	public ProcessingPane(PApplet p, PVector position, PVector dimensions) {
 		this.p = p;
 
@@ -92,10 +119,10 @@ abstract class ProcessingPane {
 		this.dimensions = dimensions;
 
 		mouseResizeBuffer = new PVector(20, 20);
-		minimumDimensions = new PVector(150, 100);
+		minimumDimensions = new PVector(50, 50);
 
 		switch (p.sketchRenderer()) {
-			case "processing.javafx.PGraphicsFX2D" :
+			case "processing.javafx.PGraphicsFX2D" : // TODO Off-screen FX2D with Processing 4  
 				canvas = p.createGraphics((int) dimensions.x, (int) dimensions.y);
 				renderer = RENDERERS.JAVAFX;
 				pAppletFXscene = ((Canvas) p.getSurface().getNative()).getScene();
@@ -117,14 +144,17 @@ abstract class ProcessingPane {
 				canvas = p.createGraphics((int) dimensions.x, (int) dimensions.y);
 				renderer = RENDERERS.JAVA2D;
 		}
-		canvas.smooth(4);
+		canvas.smooth(3);
 
 		p.registerMethod("mouseEvent", this);
 		p.registerMethod("keyEvent", this);
 	}
 
 	/**
-	 * Updates the pane and draws its contents within the parent PApplet.
+	 * Updates the pane and draws its contents into the parent PApplet.
+	 * <p>
+	 * Internally, this method calls {@link #draw()} followed by {@link #post()},
+	 * which should contain the user implementation.
 	 */
 	public final void run() {
 		update(); // resizing & dragging, etc.
@@ -269,7 +299,7 @@ abstract class ProcessingPane {
 			} else if (resizeSides[2]) { // ↙
 				position.set(min(mousePos.x, posBound.x), position.y);
 				dimensions.set(cacheDimensions.x - newDims2.x, max(newDims2.y, minimumDimensions.y));
-			} else { // ←
+			} else { // �?
 				position.set(min(mousePos.x, posBound.x), position.y);
 				dimensions.set(newDims.x, dimensions.y);
 			}
@@ -312,7 +342,7 @@ abstract class ProcessingPane {
 		if (resizeSides[0]) { // LEFT SIDE
 			if (resizeSides[1]) { // NW
 				pAppletFXscene.setCursor(Cursor.NW_RESIZE);
-			} else if (resizeSides[2]) { // â†™
+			} else if (resizeSides[2]) { // ←
 				pAppletFXscene.setCursor(Cursor.SW_RESIZE);
 			} else { // â†�
 				pAppletFXscene.setCursor(Cursor.W_RESIZE);
@@ -359,7 +389,7 @@ abstract class ProcessingPane {
 			} else { // â†“
 				canvasAWT.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.S_RESIZE_CURSOR));
 			}
-		} else if (resizeSides[3]) { // ←
+		} else if (resizeSides[3]) { // �?
 			canvasAWT.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.E_RESIZE_CURSOR));
 		}
 	}

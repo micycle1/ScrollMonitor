@@ -1,4 +1,4 @@
-package micycle.scrollMonitor;
+package micycle.scrollmonitor;
 
 import static processing.core.PApplet.constrain;
 import static processing.core.PApplet.round;
@@ -18,15 +18,15 @@ import processing.event.KeyEvent;
  * A ScrollMonitor plots realtime data from any number of data sources (referred
  * to as datastreams). To use, first define a datastream using
  * {@link #addDataStream(String, int) addDataStream()} and then
- * {@link #push(String, float) push} data to that datastream. A scrollmonitor
- * steps once per frame.
+ * {@link #push(String, float) push} data to that datastream. A ScrollMonitor
+ * steps once per frame by default.
  * 
  * 
  * <p>
  * TODO: datastream defines how many datapoints are visible from each stream
  * (global) or per-stream?{@link #addDataStream(String, int)}
  *
- * TODO scroll wheel zoom x-axis; shft+scroll+mouseover zoom y-axis
+ * TODO scroll wheel zoom x-axis; shift+scroll+mouseover zoom y-axis
  * 
  * TODO option to scroll if data not pushed (per time, or per frame) by adding
  * empty data
@@ -36,13 +36,16 @@ import processing.event.KeyEvent;
  */
 public class ScrollMonitor extends ProcessingPane {
 
+	// TODO use pushStyle(), popStyle() where applicable
+	// TODO
+
 	private final LinkedHashMap<String, DataStream> streams; // most recent last (add order)
 	private LinkedList<DataStream> drawOrder; // most recent first (draw back to front)
 
 	private boolean pause = false;
 	private int pauseTime = 0; // used to pause BG scrolling
 
-	private int graphStrokeWeight = 5;
+	private int graphStrokeWeight = 3;
 
 	private int drawSmoothingLevel = 1;
 	private int averageSmoothingLevel = 0;
@@ -57,6 +60,8 @@ public class ScrollMonitor extends ProcessingPane {
 	private int bgSegmentsVertical = 4;
 
 	private int backgroundColour = -934570246; // default colour
+	private int labelColor = 0; // value label color
+	private int axesLabelColor = 0; // value label color
 
 	private int time = 0;
 	private int timeStep = 1;
@@ -84,7 +89,7 @@ public class ScrollMonitor extends ProcessingPane {
 	 * @param historyCap how many datapoints the stream will display
 	 */
 	public void addDataStream(String name) {
-		if (!streams.containsKey(name)) { // enfore unique name
+		if (!streams.containsKey(name)) { // enforce unique name
 			streams.put(name, new DataStream(name, dataPoints, dimensions.copy(), averageSmoothingLevel));
 			drawOrder.offerFirst(streams.get(name)); // add to front of queue
 			streams.get(name).setMaxValue(yAxisMax); // set draw max value
@@ -171,7 +176,7 @@ public class ScrollMonitor extends ProcessingPane {
 
 	/**
 	 * Sets the max/ceiling Y axis display value for the monitor. Datapoints with
-	 * values greater than this will display but be capped visually.
+	 * values greater than this will display but will be visually cut off.
 	 * 
 	 * @param value
 	 * @see #setDynamicMaximum(DataStream)
@@ -179,7 +184,7 @@ public class ScrollMonitor extends ProcessingPane {
 	public void setMaxYAxisValue(float value) {
 		yAxisMax = value;
 		streams.values().forEach(stream -> stream.setMaxValue(yAxisMax));
-		yAxisDataStream = null; // disable dynamic y-axis
+//		yAxisDataStream = null; // disable dynamic y-axis
 	}
 
 	/**
@@ -247,6 +252,14 @@ public class ScrollMonitor extends ProcessingPane {
 		graphStrokeWeight = PApplet.max(0, weight);
 	}
 
+	public void setValueLabelColor(int color) {
+		labelColor = color;
+	}
+
+	public void setAxesLabelColor(int color) {
+		axesLabelColor = color;
+	}
+
 	/**
 	 * Sets the monitor's background colour. Supports opacity.
 	 * 
@@ -281,7 +294,7 @@ public class ScrollMonitor extends ProcessingPane {
 
 	/**
 	 * Sets the data unit for a stream, given by its name. This unit is appended to
-	 * the
+	 * the stream value.
 	 * 
 	 * @param dataStream
 	 * @param unit       e.g. "FPS"
@@ -382,14 +395,15 @@ public class ScrollMonitor extends ProcessingPane {
 		time += units;
 	}
 
-	@Override
 	/**
-	 * Draws into underlying Pane's canvas. Datastreams are drawn in the order of
-	 * add (first added is drawn first, most recently added is drawn at the back).
+	 * Draws into the canvas of the underlying pane. Datastreams are drawn in the
+	 * order of being added (the first added is drawn first, most recently added is
+	 * drawn at the back).
 	 */
+	@Override
 	void draw() {
-
 		canvas.clear();
+		p.pushStyle();
 
 		if (yAxisDataStream != null) {
 			if (streams.containsKey(yAxisDataStream)) { // check hasn't been removed by removeDataStream()
@@ -400,7 +414,7 @@ public class ScrollMonitor extends ProcessingPane {
 					yMax = data > yMax ? data : yMax; // set to max
 				}
 				if (yMax != yAxisMax) {
-					setMaxYAxisValue(PApplet.lerp(yAxisMax, yMax * 1.01f, 0.05f)); // set to +1% greater
+					setMaxYAxisValue(PApplet.lerp(yAxisMax, yMax * 1.05f, 0.05f)); // set to +5% greater
 				}
 			} else {
 				yAxisDataStream = null; // reset (datastream ID not present)
@@ -444,8 +458,10 @@ public class ScrollMonitor extends ProcessingPane {
 				graphShape.vertex(-graphStrokeWeight, dimensions.y + graphStrokeWeight); // lower left corner
 
 				// finished populating vertices, now check whether mouse is over graph pshape
-				if (withinMoveRegion && !dragging && mouseOverStream == null && pointInPoly(graphShape, PVector.sub(mousePos, position))) {
-					graphShape.fill(0xff000000 | ~d.fillColour, canvas.alpha(d.fillColour) - 5); // invert col if mouse over
+				if (withinMoveRegion && !dragging && mouseOverStream == null
+						&& pointInPoly(graphShape, PVector.sub(mousePos, position))) {
+					graphShape.fill(0xff000000 | ~d.fillColour, canvas.alpha(d.fillColour) - 5); // invert col if mouse
+																									// over
 					mouseOverStream = d; // only one datastream can be mouseover (detect front to back)
 				} else {
 					if (d.fill) {
@@ -467,7 +483,7 @@ public class ScrollMonitor extends ProcessingPane {
 				if (d == mouseOverStream) {
 					p.fill(0, 155, 0);
 				} else {
-					p.fill(0);
+					p.fill(labelColor);
 				}
 				p.text(round(d.getRawData(d.length)) + d.dataUnit, position.x + dimensions.x + 10,
 						position.y + (dimensions.y - d.getDrawData(d.length - 1))); // y axis label (right side)
@@ -476,9 +492,10 @@ public class ScrollMonitor extends ProcessingPane {
 
 		if (mouseOverStream != null) { // draw mouseOverStream info (on top)
 			p.cursor(PApplet.CROSS);
-			float x = constrain(mousePos.x, position.x + graphStrokeWeight - 1, position.x + dimensions.x - graphStrokeWeight + 1)
-					- position.x; // constrain mouseOverX
-			int mouseOverIndex = (int) (x / (dimensions.x / (mouseOverStream.length - 1))); // index of point mouse is over
+			float x = constrain(mousePos.x, position.x + graphStrokeWeight - 1,
+					position.x + dimensions.x - graphStrokeWeight + 1) - position.x; // constrain mouseOverX
+			int mouseOverIndex = (int) (x / (dimensions.x / (mouseOverStream.length - 1))); // index of point mouse is
+																							// over
 			float valAtMouse = mouseOverStream.getRawData(mouseOverIndex);
 			float valAtMouseDrawLength = mouseOverStream.getDrawData(mouseOverIndex);
 
@@ -492,9 +509,11 @@ public class ScrollMonitor extends ProcessingPane {
 
 			p.textAlign(PApplet.CENTER, PApplet.TOP);
 			p.fill(0, 255, 0);
-			p.text(round(valAtMouse) + mouseOverStream.dataUnit, x + position.x, position.y + dimensions.y + 10); // bottom label
+			p.text(round(valAtMouse) + mouseOverStream.dataUnit, x + position.x, position.y + dimensions.y + 10); // bottom
+																													// label
 			canvas.text(mouseOverStream.name, 10, 10); // display name of mouse-overed stream (top left)
 		}
+		p.popStyle();
 	}
 
 	@Override
@@ -529,15 +548,15 @@ public class ScrollMonitor extends ProcessingPane {
 	@Override
 	void keyReleased(KeyEvent e) {
 		switch (e.getKeyCode()) {
-			case PConstants.TAB : // TODO?
-				if (pause) {
-					unPause();
-				} else {
-					pause();
-				}
-				break;
-			default :
-				break;
+		case PConstants.TAB: // TODO?
+			if (pause) {
+				unPause();
+			} else {
+				pause();
+			}
+			break;
+		default:
+			break;
 		}
 	}
 
@@ -639,8 +658,6 @@ public class ScrollMonitor extends ProcessingPane {
 
 	/**
 	 * Draws graph background (fill and line segments)
-	 * 
-	 * @param d
 	 */
 	private void drawBG() {
 		canvas.fill(backgroundColour); // bg fill
@@ -658,7 +675,7 @@ public class ScrollMonitor extends ProcessingPane {
 		canvas.stroke(0, 150); // guidelines
 		canvas.strokeWeight(1); // guidelines
 
-		p.fill(0); // text colour
+		p.fill(axesLabelColor); // text colour
 
 		if (bgSegmentsHorizontal > 0) {
 			p.textAlign(PApplet.RIGHT, PApplet.CENTER);
@@ -668,7 +685,9 @@ public class ScrollMonitor extends ProcessingPane {
 				p.text(round(yAxisMax / bgSegmentsHorizontal * i), position.x - 10, position.y + y);
 			} // calc values based on stream max value Y
 			p.text(round(yAxisMax / bgSegmentsHorizontal * bgSegmentsHorizontal), position.x - 10,
-					position.y + dimensions.y - bgSegmentsHorizontal * (dimensions.y / (bgSegmentsHorizontal + 0))); // label, no line
+					position.y + dimensions.y - bgSegmentsHorizontal * (dimensions.y / (bgSegmentsHorizontal + 0))); // label,
+																														// no
+																														// line
 		}
 
 		if (bgSegmentsVertical > 0) {
@@ -679,9 +698,11 @@ public class ScrollMonitor extends ProcessingPane {
 			}
 			float z = dataPoints / bgSegmentsVertical;
 			for (int i = 0; i < bgSegmentsVertical; i++) { // draw vertical guidelines
-				float xPos = Math.floorMod(
-						(int) ((i * (dimensions.x / bgSegmentsVertical) - ((pause ? pauseTime : time) * dimensions.x / dataPoints))),
-						(int) dimensions.x);
+				float xPos = Math
+						.floorMod(
+								(int) ((i * (dimensions.x / bgSegmentsVertical)
+										- ((pause ? pauseTime : time) * dimensions.x / dataPoints))),
+								(int) dimensions.x);
 				canvas.line(xPos, 0, xPos, dimensions.y);
 				p.text((int) (time - ((time % dataPoints)) + (z * i)), position.x + xPos,
 						position.y - 2 - borderStrokeWeight + xAxisPosition); // draw x-axis labels
@@ -694,7 +715,7 @@ public class ScrollMonitor extends ProcessingPane {
 	 * 
 	 * @param s     PShape
 	 * @param point PVector point to check
-	 * @return boolean
+	 * @return boolean true if point in polygon
 	 */
 	private static final boolean pointInPoly(PShape s, PVector point) {
 
